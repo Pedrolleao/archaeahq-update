@@ -50,10 +50,14 @@ Created at Vee Lab - Radboud University.
 **Install** (pick one):
 
 ```bash
-# a) pip, into any Python ≥ 3.10 (the external tools are installed by `setup` afterwards)
+# a) conda: tool + CheckM2, NCBI Datasets, skani, barrnap in one go (once the bioconda recipe is merged)
+conda create -n archaeahq -c conda-forge -c bioconda archaeahq-update
+conda activate archaeahq
+
+# b) pip, into any Python ≥ 3.10 (the external tools are installed by `setup` afterwards)
 pip install git+https://github.com/Pedrolleao/archaeahq-update.git
 
-# b) or just clone: the launcher archaeahq_update.py runs from the clone without installing
+# c) or just clone: the launcher archaeahq_update.py runs from the clone without installing
 git clone https://github.com/Pedrolleao/archaeahq-update.git
 cd archaeahq-update
 ```
