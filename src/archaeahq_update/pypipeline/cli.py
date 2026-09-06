@@ -172,7 +172,7 @@ def main() -> int:
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
-    from pypipeline.runner import run
+    from ..pypipeline.runner import run
 
     accessions = _read_accessions(args.input)
     api_key    = args.api_key or os.environ.get("NCBI_API_KEY")

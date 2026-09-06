@@ -8,7 +8,7 @@ import shutil
 from pathlib import Path
 from typing import Dict, Optional
 
-from common import NOT_AVAILABLE, fmt_num, park_score, read_tsv, run_cmd, to_float
+from .common import NOT_AVAILABLE, fmt_num, park_score, read_tsv, run_cmd, to_float
 
 # CheckM2 quality_report.tsv column → ArchaeaHQ column
 CHECKM2_COLUMNS = {

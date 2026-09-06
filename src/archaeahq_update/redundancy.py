@@ -18,7 +18,7 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
-from common import (acc_is_refseq, acc_numeric, acc_parts, acc_version, log, name_to_acc, run_cmd, sha1_of,
+from .common import (acc_is_refseq, acc_numeric, acc_parts, acc_version, log, name_to_acc, run_cmd, sha1_of,
                     strip_fna, write_lines)
 
 

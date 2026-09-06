@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence
 
-from common import BUNDLE_DIR, ENVIRONMENT_YML, CommandError, log, run_cmd
+from .common import BUNDLE_DIR, ENVIRONMENT_YML, CommandError, log, run_cmd
 
 DEFAULT_ENV_NAME = "archaeahq-update"
 REQUIRED_TOOLS = ["datasets", "dataformat", "checkm2", "skani", "barrnap"]

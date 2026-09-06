@@ -10,10 +10,10 @@ import sys
 
 # (bundled in archaeahq-update: pyassembly/pytaxonkit live next to this package under lib/)
 
-from pytaxonkit.data import ensure_data_available, get_data_dir
-from pytaxonkit.db import open_db, load_all
-from pytaxonkit.traversal import TaxonomyTree
-from pytaxonkit.formatter import CANONICAL_RANKS, RANK_ALIASES
+from ..pytaxonkit.data import ensure_data_available, get_data_dir
+from ..pytaxonkit.db import open_db, load_all
+from ..pytaxonkit.traversal import TaxonomyTree
+from ..pytaxonkit.formatter import CANONICAL_RANKS, RANK_ALIASES
 
 # Fields exported in the taxonomy output and appended to the combined output.
 # tax_id is the first column in the taxonomy-only output.

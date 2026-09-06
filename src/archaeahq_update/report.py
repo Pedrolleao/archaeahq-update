@@ -10,7 +10,7 @@ from collections import Counter, OrderedDict
 from pathlib import Path
 from typing import Dict, List, Sequence
 
-from common import DB_COLUMNS, FILTER_COLUMNS, write_tsv
+from .common import DB_COLUMNS, FILTER_COLUMNS, write_tsv
 
 FULL_COLUMNS = ["Recommendation", "Reason"] + DB_COLUMNS
 FILTER_TABLE_COLUMNS = ["Assembly ID", "Archaeal_Kingdom", "Overall"] + FILTER_COLUMNS + ["Notes"]

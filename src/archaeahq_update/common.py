@@ -21,14 +21,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, List, Optional, Sequence
 
-VERSION = "1.0.0"
+from . import __version__ as VERSION  # noqa: E402
 
-BUNDLE_DIR = Path(__file__).resolve().parent.parent
-LIB_DIR = BUNDLE_DIR / "lib"
-DATA_DIR = BUNDLE_DIR / "data"
+PACKAGE_DIR = Path(__file__).resolve().parent
+BUNDLE_DIR = PACKAGE_DIR                      # kept for callers that protect the install location
+DATA_DIR = PACKAGE_DIR / "data"
 DB_TABLE_PATH = DATA_DIR / "ArchaeaHQ-Info.tsv"
 EVALUATED_PATH = DATA_DIR / "evaluated_accessions.tsv"
-ENVIRONMENT_YML = BUNDLE_DIR / "environment.yml"
+ENVIRONMENT_YML = DATA_DIR / "environment.yml"
 
 log = logging.getLogger("archaeahq")
 
@@ -395,8 +395,3 @@ def setup_file_logging(log_file: Path, level=logging.INFO) -> None:
     fh.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
     log.addHandler(fh)
 
-
-def ensure_lib_on_path() -> None:
-    p = str(LIB_DIR)
-    if p not in sys.path:
-        sys.path.insert(0, p)

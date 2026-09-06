@@ -18,11 +18,11 @@ from typing import IO, Optional, Set
 
 # (bundled in archaeahq-update: pyassembly/pytaxonkit live next to this package under lib/)
 
-from pyassembly.db import open_db as open_assembly_db, get_cached, store_results
-from pyassembly.fetcher import fetch_metadata, BATCH_SIZE
+from ..pyassembly.db import open_db as open_assembly_db, get_cached, store_results
+from ..pyassembly.fetcher import fetch_metadata, BATCH_SIZE
 
-from pypipeline.taxonomy import load_tree, lineage_dict, TAXONOMY_COLS
-from pypipeline.merger import (
+from ..pypipeline.taxonomy import load_tree, lineage_dict, TAXONOMY_COLS
+from ..pypipeline.merger import (
     ASSEMBLY_HEADER,
     TAXONOMY_HEADER,
     COMBINED_HEADER,

@@ -21,8 +21,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
 
-from common import CommandError, log, run_cmd, strip_fna
-import compile_barrnap as cb
+from .common import CommandError, log, run_cmd, strip_fna
+from . import compile_barrnap as cb
 
 _flags_cache: Dict[str, List[str]] = {}
 

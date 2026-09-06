@@ -35,7 +35,7 @@ def ensure_data_available(
     2. .dmp files already present → build index only
     3. Neither → download, extract, then build index
     """
-    from pytaxonkit.db import db_is_valid, build_index, open_db
+    from ..pytaxonkit.db import db_is_valid, build_index, open_db
 
     data_dir.mkdir(parents=True, exist_ok=True)
     db_path = data_dir / DB_FILENAME

@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "archaeahq-update"
+dynamic = ["version"]
+description = "Keep ArchaeaHQ, the curated reference database of archaeal genomes, up to date with NCBI"
+readme = "README.md"
+license = {file = "LICENSE"}
+requires-python = ">=3.10"
+authors = [{name = "Pedro Leão, Vee Lab - Radboud University"}]
+keywords = ["archaea", "genomes", "database", "NCBI", "CheckM2", "skani", "metagenomics"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Environment :: Console",
+]
+# Python-side dependencies only. The external tools (checkm2, ncbi-datasets-cli, skani, barrnap,
+# aragorn) come from conda: see src/archaeahq_update/data/environment.yml or the bioconda package.
+dependencies = [
+    "rich>=13",
+    "requests>=2.25",
+    "tqdm>=4.60",
+]
+
+[project.optional-dependencies]
+sankey = ["plotly>=5", "kaleido==0.2.1", "pillow"]
+test = ["pytest>=7"]
+
+[project.scripts]
+archaeahq-update = "archaeahq_update.cli:main"
+
+[project.urls]
+Homepage = "https://vee-lab.eu/archaeahq"
+Dataset = "https://figshare.com/articles/dataset/ArchaeaHQ_v_1_00_2026/32266599"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+archaeahq_update = ["data/*.tsv", "data/*.json", "data/environment.yml"]
+
+[tool.setuptools.dynamic]
+version = {attr = "archaeahq_update.__version__"}
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

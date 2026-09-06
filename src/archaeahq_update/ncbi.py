@@ -12,7 +12,7 @@ import zipfile
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Sequence
 
-from common import CommandError, log, run_cmd, run_pipe, write_lines
+from .common import CommandError, log, run_cmd, run_pipe, write_lines
 
 # Fields requested from `dataformat tsv genome` and the keys we store them under.
 SUMMARY_FIELDS = [

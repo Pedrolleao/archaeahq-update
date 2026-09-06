@@ -77,7 +77,7 @@ def build_index(data_dir: Path, verbose: bool = False) -> None:
 
     This is a one-time operation (~30–60 s) that builds the SQLite index.
     """
-    from pytaxonkit.data import (
+    from ..pytaxonkit.data import (
         parse_nodes_dmp,
         parse_names_dmp,
         parse_merged_dmp,

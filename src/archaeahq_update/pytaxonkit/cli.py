@@ -85,10 +85,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run_lineage(args: argparse.Namespace) -> int:
     """Main handler for the 'lineage' sub-command."""
-    from pytaxonkit.data import get_data_dir, ensure_data_available
-    from pytaxonkit.db import open_db, load_all
-    from pytaxonkit.traversal import TaxonomyTree
-    from pytaxonkit.formatter import format_result, LINEAGE_HEADER, CANONICAL_HEADER, TAXIDS_HEADER
+    from ..pytaxonkit.data import get_data_dir, ensure_data_available
+    from ..pytaxonkit.db import open_db, load_all
+    from ..pytaxonkit.traversal import TaxonomyTree
+    from ..pytaxonkit.formatter import format_result, LINEAGE_HEADER, CANONICAL_HEADER, TAXIDS_HEADER
 
     # 1. Resolve data dir & ensure DB exists
     data_dir = get_data_dir(args.data_dir)

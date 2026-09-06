@@ -2,7 +2,7 @@
 
 from typing import List
 
-from pytaxonkit.traversal import LineageResult
+from ..pytaxonkit.traversal import LineageResult
 
 # Canonical 8 ranks used by --format canonical
 CANONICAL_RANKS = [

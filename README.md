@@ -47,11 +47,23 @@ Created at Vee Lab - Radboud University.
 * Internet access to NCBI. An NCBI API key (`--api-key` or `$NCBI_API_KEY`) is optional and doubles
   the rate limit.
 
+**Install** (pick one):
+
 ```bash
+# a) pip, into any Python ≥ 3.10 (the external tools are installed by `setup` afterwards)
+pip install git+https://github.com/<org>/archaeahq-update.git
+
+# b) or just clone: the launcher archaeahq_update.py runs from the clone without installing
 git clone https://github.com/<org>/archaeahq-update.git
 cd archaeahq-update
-python3 archaeahq_update.py setup                # conda env (if needed) + CheckM2 database
-python3 archaeahq_update.py fetch-db             # ArchaeaHQ v1.0 from figshare → Archaea_HQ-v1.0/
+```
+
+Installed, the command is `archaeahq-update`; from a clone, `python3 archaeahq_update.py`
+(same commands and flags — the examples below use the installed name).
+
+```bash
+archaeahq-update setup                # conda env (if needed) + CheckM2 database
+archaeahq-update fetch-db             # ArchaeaHQ v1.0 from figshare → Archaea_HQ-v1.0/
 ```
 
 `fetch-db` is the guided first-time setup: it shows what will be downloaded and the disk space
@@ -71,21 +83,24 @@ knows exactly what v1.0 contains and what it already rejected.
 
 ```bash
 # 1. What is new at NCBI since my version?   (nothing is downloaded)
-python3 archaeahq_update.py check
+archaeahq-update check
 
 # 2. Download and evaluate the new genomes
-python3 archaeahq_update.py run --threads 24
+archaeahq-update run --threads 24
 
 # 3. Look at the recommendations
 less archaeahq_update_work/runs/run_<date>/summary.txt
 
 # 4. Accept them: build the next version, Archaea_HQ-v1.1/, next to the script
-python3 archaeahq_update.py release
+archaeahq-update release
 ```
 
 Every command finds the newest `Archaea_HQ-v<major>.<minor>/` folder automatically (the one
 `fetch-db` created, then the ones `release` builds), so the cycle is simply `check` → `run` →
-`release`, and each `release` produces v1.1, v1.2, …
+`release`, and each `release` produces v1.1, v1.2, … The version folders live in the current
+folder when the tool is installed, or next to `archaeahq_update.py` when run from a clone; set
+`$ARCHAEAHQ_RELEASES` or pass `--releases-dir` to keep them elsewhere. Run the commands from the
+same folder each time so the work directory (`./archaeahq_update_work`) is found again.
 
 If you unpacked `fna.zip` yourself instead of using `fetch-db`, point the first `run` and
 `release` at that folder with `--db-fna /path/to/fna`; `release` then creates `Archaea_HQ-v1.1/`
@@ -94,10 +109,10 @@ from it.
 Useful variations:
 
 ```bash
-python3 archaeahq_update.py run --kingdoms asgard,dpann --max-genomes 50   # small test run
-python3 archaeahq_update.py run --accessions-file my_accessions.txt         # evaluate your own list
-python3 archaeahq_update.py release --dry-run                               # preview only
-python3 archaeahq_update.py release --accept reviewed_accessions.txt        # apply a curated subset
+archaeahq-update run --kingdoms asgard,dpann --max-genomes 50   # small test run
+archaeahq-update run --accessions-file my_accessions.txt         # evaluate your own list
+archaeahq-update release --dry-run                               # preview only
+archaeahq-update release --accept reviewed_accessions.txt        # apply a curated subset
 ```
 
 An interrupted `run` resumes from the last finished stage when you repeat the same command.
@@ -203,7 +218,7 @@ archaeahq_update.py release    [--run NAME | --table F] [--new-fna DIR] [--accep
 | Flag | Default | Meaning |
 |---|---|---|
 | `--workdir DIR` | `./archaeahq_update_work` | runs, caches, ledger and logs |
-| `--releases-dir DIR` | folder of the script | where the `Archaea_HQ-v*` version folders live; the newest one is the current database |
+| `--releases-dir DIR` | `$ARCHAEAHQ_RELEASES`, else the current folder (clone launcher: its own folder) | where the `Archaea_HQ-v*` version folders live; the newest one is the current database |
 | `--db-table F` | table of the newest version, else `data/ArchaeaHQ-Info.tsv` (v1.0) | use another information table |
 | `--kingdoms LIST` | `eury,tack,dpann,asgard` | subset of kingdoms to list/evaluate |
 | `--threads N` | CPUs − 2 | threads for CheckM2, skani, barrnap |
@@ -276,24 +291,26 @@ log is `runs/<run>/archaeahq_update.log`.
 
 ```
 archaeahq-update/
-├── archaeahq_update.py      entry point (CLI, stages, report, release)
-├── environment.yml          conda environment (checkm2, ncbi-datasets-cli, skani, barrnap, rich …)
-├── README.md
-├── DEVELOPMENT.md           design decisions, tests, pitfalls
-├── LICENSE
-├── data/
-│   ├── ArchaeaHQ-Info.tsv           v1.0 information table (21,644 genomes, 25 columns)
-│   ├── evaluated_accessions.tsv     the 35,993 assemblies evaluated for v1.0 and their decision
-│   ├── kingdoms.json                taxids, labels, colours of the four kingdoms
-│   └── thresholds.json              every cut-off
-├── lib/
-│   ├── common.py  ui.py  envcheck.py  ncbi.py  quality.py  redundancy.py  rna.py  report.py
-│   ├── classify_environments.py     environment classifier (as used for the paper)
-│   ├── compile_barrnap.py           GFF → RNA counts (as used for the paper)
-│   ├── sankey_generic.py            Sankey figure
-│   └── pyassembly/ pytaxonkit/ pypipeline/   NCBI metadata + taxonomy toolkit
-├── Archaea_HQ-v1.1/         (not in git) your current database version (`fetch-db` → v1.0, `release` → v1.1, …)
-└── archaeahq_update_work/   (not in git) runs, caches, ledger
+├── archaeahq_update.py          launcher for running from a clone (no install needed)
+├── pyproject.toml               pip-installable package; entry point `archaeahq-update`
+├── environment.yml              → src/archaeahq_update/data/environment.yml (conda env with the tools)
+├── README.md  DEVELOPMENT.md  LICENSE
+├── src/archaeahq_update/
+│   ├── cli.py                   commands, stages, report assembly, release
+│   ├── common.py  ui.py  envcheck.py  ncbi.py  quality.py  redundancy.py  rna.py  report.py  fetchdb.py
+│   ├── classify_environments.py environment classifier (as used for the paper)
+│   ├── compile_barrnap.py       GFF → RNA counts (as used for the paper)
+│   ├── sankey_generic.py        Sankey figure
+│   ├── pyassembly/ pytaxonkit/ pypipeline/   NCBI metadata + taxonomy toolkit
+│   └── data/
+│       ├── ArchaeaHQ-Info.tsv           v1.0 information table (21,644 genomes, 25 columns)
+│       ├── evaluated_accessions.tsv     the 35,993 assemblies evaluated for v1.0 and their decision
+│       ├── kingdoms.json                taxids, labels, colours of the four kingdoms
+│       ├── thresholds.json              every cut-off
+│       └── environment.yml              conda environment (checkm2, ncbi-datasets-cli, skani, barrnap …)
+├── tests/                       pytest suite (`pip install -e .[test] && pytest`)
+├── Archaea_HQ-v1.1/             (not in git) your current database version (`fetch-db` → v1.0, `release` → v1.1, …)
+└── archaeahq_update_work/       (not in git) runs, caches, ledger
 ```
 
 ---

@@ -82,6 +82,15 @@ Decisions taken by the developer (documented in README):
 
 ## 3. What is in the bundle and where it came from
 
+> Since the packaging step (2026-09-06) the code lives in `src/archaeahq_update/` as an
+> installable package (`pyproject.toml`, entry point `archaeahq-update`, data files under
+> `src/archaeahq_update/data/`, relative imports); `archaeahq_update.py` at the root is only a
+> launcher that puts `src/` on the path and defaults `--releases-dir` to the repository folder
+> (installed: `$ARCHAEAHQ_RELEASES` or the current folder). The tree below describes the modules
+> and their origin; read `lib/` as `src/archaeahq_update/` and `data/` as
+> `src/archaeahq_update/data/`. Tests: `tests/` (pytest, no external tools needed).
+
+
 ```
 archaeahq-update/
 ├── archaeahq_update.py      entry point (CLI, run context, stage orchestration, table assembly)

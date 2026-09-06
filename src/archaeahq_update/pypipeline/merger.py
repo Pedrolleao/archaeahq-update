@@ -10,8 +10,8 @@ import sys
 
 # (bundled in archaeahq-update: pyassembly/pytaxonkit live next to this package under lib/)
 
-from pyassembly.formatter import HEADER as _ASSEMBLY_HEADER, _FIELDS as _ASSEMBLY_FIELDS
-from pypipeline.taxonomy import TAXONOMY_COLS
+from ..pyassembly.formatter import HEADER as _ASSEMBLY_HEADER, _FIELDS as _ASSEMBLY_FIELDS
+from ..pypipeline.taxonomy import TAXONOMY_COLS
 
 # ── Headers ───────────────────────────────────────────────────────────────────
 
