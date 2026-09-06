@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://vee-lab.eu/archaeahq"><img src="assets/archaeahq-logo.png" alt="ArchaeaHQ" width="160"></a>
+  <a href="https://vee-lab.eu/archaeahq"><img src="assets/ArchaeaHQ-Logo.png" alt="ArchaeaHQ" width="240"></a>
 </p>
 
 <h1 align="center">archaeahq-update</h1>
@@ -303,7 +303,7 @@ archaeahq-update/
 ├── pyproject.toml               pip-installable package; entry point `archaeahq-update`
 ├── environment.yml              → src/archaeahq_update/data/environment.yml (conda env with the tools)
 ├── README.md  DEVELOPMENT.md  LICENSE
-├── assets/                      ArchaeaHQ logo (mark and framed wordmark versions)
+├── assets/                      ArchaeaHQ logo
 ├── src/archaeahq_update/
 │   ├── cli.py                   commands, stages, report assembly, release
 │   ├── common.py  ui.py  envcheck.py  ncbi.py  quality.py  redundancy.py  rna.py  report.py  fetchdb.py
