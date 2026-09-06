@@ -51,10 +51,10 @@ Created at Vee Lab - Radboud University.
 
 ```bash
 # a) pip, into any Python ≥ 3.10 (the external tools are installed by `setup` afterwards)
-pip install git+https://github.com/<org>/archaeahq-update.git
+pip install git+https://github.com/Pedrolleao/archaeahq-update.git
 
 # b) or just clone: the launcher archaeahq_update.py runs from the clone without installing
-git clone https://github.com/<org>/archaeahq-update.git
+git clone https://github.com/Pedrolleao/archaeahq-update.git
 cd archaeahq-update
 ```
 

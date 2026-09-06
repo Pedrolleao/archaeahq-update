@@ -36,6 +36,7 @@ archaeahq-update = "archaeahq_update.cli:main"
 [project.urls]
 Homepage = "https://vee-lab.eu/archaeahq"
 Dataset = "https://figshare.com/articles/dataset/ArchaeaHQ_v_1_00_2026/32266599"
+Repository = "https://github.com/Pedrolleao/archaeahq-update"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
