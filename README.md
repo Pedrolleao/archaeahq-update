@@ -1,6 +1,10 @@
-# archaeahq-update
+<p align="center">
+  <a href="https://vee-lab.eu/archaeahq"><img src="assets/archaeahq-logo.png" alt="ArchaeaHQ" width="160"></a>
+</p>
 
-Keep your own copy of **ArchaeaHQ** up to date with NCBI.
+<h1 align="center">archaeahq-update</h1>
+
+<p align="center">Keep your own copy of <b>ArchaeaHQ</b> up to date with NCBI.</p>
 
 [ArchaeaHQ](https://vee-lab.eu/archaeahq) is a quality-controlled, systematically curated reference
 database of archaeal genomes: 21,644 genomes from the four archaeal kingdoms
@@ -299,6 +303,7 @@ archaeahq-update/
 ├── pyproject.toml               pip-installable package; entry point `archaeahq-update`
 ├── environment.yml              → src/archaeahq_update/data/environment.yml (conda env with the tools)
 ├── README.md  DEVELOPMENT.md  LICENSE
+├── assets/                      ArchaeaHQ logo (mark and framed wordmark versions)
 ├── src/archaeahq_update/
 │   ├── cli.py                   commands, stages, report assembly, release
 │   ├── common.py  ui.py  envcheck.py  ncbi.py  quality.py  redundancy.py  rna.py  report.py  fetchdb.py
