@@ -51,14 +51,15 @@ Created at Vee Lab - Radboud University.
 git clone https://github.com/<org>/archaeahq-update.git
 cd archaeahq-update
 python3 archaeahq_update.py setup                # conda env (if needed) + CheckM2 database
+python3 archaeahq_update.py fetch-db             # ArchaeaHQ v1.0 from figshare → Archaea_HQ-v1.0/
 ```
 
-Then get the genomes of the version you start from:
-
-```bash
-# ArchaeaHQ v1.0 from figshare: unpack fna.zip into a folder of your choice
-unzip fna.zip -d /data/ArchaeaHQ_v1.0            # → /data/ArchaeaHQ_v1.0/fna/*.fna
-```
+`fetch-db` is the guided first-time setup: it shows what will be downloaded and the disk space
+needed, asks for confirmation, downloads `fna.zip` (11 GB, resumable — just rerun it after an
+interruption), verifies the MD5 published by figshare, unpacks the 21,644 genomes into
+`Archaea_HQ-v1.0/fna/`, registers the version and prints the next commands. Add `--extras faa,16s,tables`
+for the proteins, the 16S sequences and the supplementary tables, or `--from-zip fna.zip` if you
+already downloaded the archive by hand.
 
 The v1.0 information table (`data/ArchaeaHQ-Info.tsv`) and the list of the 35,993 assemblies that
 were evaluated for v1.0 (`data/evaluated_accessions.tsv`) ship with the repository, so the tool
@@ -72,18 +73,23 @@ knows exactly what v1.0 contains and what it already rejected.
 # 1. What is new at NCBI since my version?   (nothing is downloaded)
 python3 archaeahq_update.py check
 
-# 2. Download and evaluate the new genomes   (first time: point at the unpacked v1.0 genomes)
-python3 archaeahq_update.py run --db-fna /data/ArchaeaHQ_v1.0/fna --threads 24
+# 2. Download and evaluate the new genomes
+python3 archaeahq_update.py run --threads 24
 
 # 3. Look at the recommendations
 less archaeahq_update_work/runs/run_<date>/summary.txt
 
 # 4. Accept them: build the next version, Archaea_HQ-v1.1/, next to the script
-python3 archaeahq_update.py release --db-fna /data/ArchaeaHQ_v1.0/fna
+python3 archaeahq_update.py release
 ```
 
-From then on every command finds the newest `Archaea_HQ-v<major>.<minor>/` folder automatically,
-so the cycle is simply `check` → `run` → `release`, and each `release` produces v1.2, v1.3, …
+Every command finds the newest `Archaea_HQ-v<major>.<minor>/` folder automatically (the one
+`fetch-db` created, then the ones `release` builds), so the cycle is simply `check` → `run` →
+`release`, and each `release` produces v1.1, v1.2, …
+
+If you unpacked `fna.zip` yourself instead of using `fetch-db`, point the first `run` and
+`release` at that folder with `--db-fna /path/to/fna`; `release` then creates `Archaea_HQ-v1.1/`
+from it.
 
 Useful variations:
 
@@ -161,8 +167,8 @@ rows to the current version and writes the next one (minor version + 1) into `--
 * Once the new folder is verified (every carried genome present with the same name and size),
   the **superseded version is deleted** — `--keep-previous` keeps it. A folder holding FASTA files
   that are not in the table is never deleted automatically, and the repository's `data/` folder is
-  never touched. On the first release the unpacked v1.0 folder given with `--db-fna` is the one
-  removed; the v1.0 table stays in `data/`.
+  never touched. On the first release the `Archaea_HQ-v1.0/` folder made by `fetch-db` (or the
+  unpacked folder given with `--db-fna`) is the one removed; the v1.0 table stays in `data/`.
 * The comparison between the two versions (genomes per kingdom, quality and size statistics,
   environment categories) is printed and saved as `comparison.txt`.
 
@@ -182,6 +188,7 @@ Total                             21,644   3,940          1   25,584   +18.2%
 
 ```
 archaeahq_update.py setup      [common options]
+archaeahq_update.py fetch-db   [--from-zip F] [--extras faa,16s,tables] [--keep-zip] [--no-verify] [--yes]
 archaeahq_update.py check      [--reevaluate] [--accessions-file F]
 archaeahq_update.py run        [--db-fna DIR | --db-sketch DIR] [--max-genomes N] [--accessions-file F]
                                [--reevaluate] [--include-twins] [--from-stage STAGE] [--run-name NAME]
@@ -205,6 +212,19 @@ archaeahq_update.py release    [--run NAME | --table F] [--new-fna DIR] [--accep
 | `--checkm2-db PATH` | downloaded to the cache | folder or `.dmnd` file of the CheckM2 database |
 | `--no-install` | | never create a conda environment; fail instead |
 | `--plain` | (also `NO_COLOR=1`) | no colours, no progress bars |
+
+**`fetch-db`** — download ArchaeaHQ v1.0 from figshare and set it up as `Archaea_HQ-v1.0/` in
+`--releases-dir`.
+
+| Flag | Meaning |
+|---|---|
+| `--from-zip F` | use an already downloaded `fna.zip` instead of downloading it |
+| `--extras LIST` | also fetch `faa` (proteins, 6.3 GB zip → `faa/`), `16s` (`Archaea_HQ-16S.fasta`), `tables` (supplementary xlsx) |
+| `--keep-zip` | keep the zip archives after unpacking (default: deleted to save space) |
+| `--no-verify` | skip the MD5 check against figshare's checksums |
+| `--yes`, `-y` | do not ask for confirmation |
+
+Downloads are resumable: an interrupted `fetch-db` continues where it stopped when rerun.
 
 **`check`** — list the new assemblies per kingdom; nothing is downloaded.
 
@@ -272,7 +292,7 @@ archaeahq-update/
 │   ├── compile_barrnap.py           GFF → RNA counts (as used for the paper)
 │   ├── sankey_generic.py            Sankey figure
 │   └── pyassembly/ pytaxonkit/ pypipeline/   NCBI metadata + taxonomy toolkit
-├── Archaea_HQ-v1.1/         (not in git) your current database version, built by `release`
+├── Archaea_HQ-v1.1/         (not in git) your current database version (`fetch-db` → v1.0, `release` → v1.1, …)
 └── archaeahq_update_work/   (not in git) runs, caches, ledger
 ```
 

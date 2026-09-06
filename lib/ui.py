@@ -124,6 +124,22 @@ def err(msg: str) -> None:
     console().print(f"[err]✗[/] {msg}" if not _plain else f"[ERROR] {msg}")
 
 
+def confirm(question: str, default: bool = True) -> bool:
+    """Ask yes/no on the terminal; non-interactive sessions get the default."""
+    import sys
+    if not sys.stdin.isatty():
+        return default
+    hint = "[Y/n]" if default else "[y/N]"
+    try:
+        ans = console().input(f"[secondary]?[/] {question} {hint} ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        console().print()
+        return False
+    if not ans:
+        return default
+    return ans in ("y", "yes")
+
+
 def kv(key: str, value, key_width: int = 22) -> None:
     console().print(f"  [muted]{key:<{key_width}}[/] {value}")
 

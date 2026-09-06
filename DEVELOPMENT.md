@@ -126,6 +126,11 @@ No file in the bundle references a path outside it (checked with `grep` for `/ho
 
 * `setup` — resolve tools (create env if needed), ensure the CheckM2 database, write
   `environment.json`.
+* `fetch-db` — guided first-time setup (`lib/fetchdb.py`, standard library only): figshare API
+  for the file list and MD5s, resumable download (`Range` requests, `.part` file), MD5 check,
+  streaming flat unzip of `fna/*.fna` (the archive also holds an empty `fna/@eaDir/`), copy of the
+  bundled v1.0 table, `release.json` with version v1.0 → `Archaea_HQ-v1.0/`. Confirmation prompts
+  default to yes when stdin is not a terminal.
 * `check` — stages env (datasets only) + list; writes `checks/check_<date>/new_accessions.tsv`.
 * `run` — all eight stages; needs `--db-fna` (FASTA folder) or `--db-sketch` (skani sketch).
 * `sketch-db` — `skani sketch -l <list> -o <out>` of the database genomes (4.9 GB for 21,644

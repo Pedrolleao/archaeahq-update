@@ -4,6 +4,7 @@ archaeahq_update.py — find archaeal genomes newly deposited at NCBI, run the A
 pipeline on them and recommend which ones should be added to the database.
 
     archaeahq_update.py setup                      create/verify the tools and the CheckM2 database
+    archaeahq_update.py fetch-db                   download ArchaeaHQ v1.0 from figshare → Archaea_HQ-v1.0/
     archaeahq_update.py check                      list new NCBI assemblies per kingdom (no download)
     archaeahq_update.py run                        full evaluation → two result tables
     archaeahq_update.py sketch-db --out DIR        build a reusable skani sketch of the database
@@ -37,6 +38,7 @@ import quality as Q           # noqa: E402
 import redundancy as R        # noqa: E402
 import rna                    # noqa: E402
 import report                 # noqa: E402
+import fetchdb                # noqa: E402
 from classify_environments import classify  # noqa: E402
 
 STAGE_TITLES = OrderedDict([
@@ -90,6 +92,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("setup", help="create/verify the conda environment and the CheckM2 database")
     common_opts(s)
+
+    s = sub.add_parser("fetch-db", help="download ArchaeaHQ v1.0 from figshare and set it up as the first database version")
+    common_opts(s)
+    s.add_argument("--from-zip", default=None, help="use an already downloaded fna.zip instead of downloading it")
+    s.add_argument("--extras", default="",
+                   help="comma-separated extras to download as well: faa (proteins, 6.3 GB), 16s, tables")
+    s.add_argument("--keep-zip", action="store_true", help="keep the zip archive(s) after unpacking")
+    s.add_argument("--no-verify", action="store_true", help="skip the MD5 check of the downloaded files")
+    s.add_argument("--yes", "-y", action="store_true", help="do not ask for confirmation")
 
     s = sub.add_parser("check", help="list new NCBI assemblies per kingdom (nothing is downloaded)")
     common_opts(s)
@@ -640,6 +651,145 @@ def cmd_setup(ctx: Context) -> int:
     return 0
 
 
+def cmd_fetch_db(ctx: Context) -> int:
+    a = ctx.args
+    ctx.log_path = ctx.workdir / "fetch.log"
+    C.setup_file_logging(ctx.workdir / "archaeahq_update.log")
+    dest = ctx.releases_dir / C.release_folder_name(fetchdb.FIGSHARE_VERSION)
+    extras = [x.strip().lower() for x in a.extras.split(",") if x.strip()]
+    keys = {v[0]: k for k, v in fetchdb.FILES.items()}
+    bad = [x for x in extras if x not in keys or x == "fna"]
+    if bad:
+        raise SystemExit(f"unknown --extras {', '.join(bad)}; choose from faa, 16s, tables")
+    wanted = ["fna.zip"] + [keys[x] for x in extras]
+
+    ui.kv("dataset", f"ArchaeaHQ {fetchdb.FIGSHARE_VERSION}  ·  {fetchdb.FIGSHARE_PAGE}")
+    ui.kv("DOI", fetchdb.FIGSHARE_DOI)
+    ui.kv("destination", dest)
+    if C.is_release_folder(dest):
+        n = sum(1 for _ in (dest / "fna").glob("*.fna")) if (dest / "fna").is_dir() else 0
+        ui.ok(f"{dest} is already set up ({n:,} genomes) — nothing to download")
+        if not extras:
+            _fetch_next_steps(ctx)
+            return 0
+    if ctx.current_release and ctx.current_release != dest:
+        ui.warn(f"a newer database version already exists here: {ctx.current_release}")
+        if not a.yes and not ui.confirm("download v1.0 anyway?", default=False):
+            return 1
+
+    with ui.spinner("asking figshare for the file list"):
+        files = fetchdb.article_files()
+    missing = [w for w in wanted if w not in files]
+    if missing:
+        raise SystemExit(f"figshare article {fetchdb.FIGSHARE_ARTICLE} has no file named {', '.join(missing)}")
+    rows, dl_gb, unpacked_gb = [], 0.0, 0.0
+    for w in wanted:
+        f, (key, what, unpacked) = files[w], fetchdb.FILES[w]
+        if not (w == "fna.zip" and a.from_zip):
+            dl_gb += f["size"] / 1e9
+        rows.append([w, what, f"{f['size'] / 1e9:.2f}", f"{unpacked:g}"])
+        unpacked_gb += unpacked
+    ui.table("Files", ["file", "content", "download (GB)", "unpacked (GB)"], rows,
+             justify={"content": "left"})
+    free = fetchdb.free_space_gb(dest)
+    need_gb = dl_gb + unpacked_gb
+    after_gb = need_gb if a.keep_zip else unpacked_gb
+    ui.kv("disk needed", f"~{need_gb:.0f} GB during setup, ~{after_gb:.0f} GB afterwards")
+    ui.kv("disk free", f"{free:.0f} GB at {dest.parent}")
+    if free < need_gb:
+        ui.warn("not enough free space for the download plus the unpacked files")
+        if not a.yes and not ui.confirm("continue anyway?", default=False):
+            return 1
+    if not a.yes and not ui.confirm(f"download and set up ArchaeaHQ {fetchdb.FIGSHARE_VERSION} in {dest}?"):
+        ui.info("nothing done")
+        return 1
+
+    dest.mkdir(parents=True, exist_ok=True)
+    total = 2 + len(wanted) + (0 if a.no_verify else 1)
+    step = 0
+    zips: Dict[str, Path] = {}
+    for w in wanted:
+        f = files[w]
+        step += 1
+        with ui.stage(step, total, f"Downloading {w} ({f['size'] / 1e9:.2f} GB)"):
+            if w == "fna.zip" and a.from_zip:
+                zips[w] = Path(a.from_zip).expanduser().resolve()
+                if not zips[w].is_file():
+                    raise SystemExit(f"--from-zip {zips[w]} not found")
+                ui.info(f"using {zips[w]} (no download)")
+                continue
+            target = dest / w
+            with ui.progress() as prog:
+                task = prog.add_task(f"{w} (MB)", total=max(1, f["size"] // 1_000_000))
+                got = [0]
+
+                def cb(n, got=got, task=task, prog=prog):
+                    got[0] += n
+                    prog.update(task, completed=got[0] // 1_000_000)
+                fetchdb.download(f["download_url"], target, f["size"], progress_cb=cb)
+            zips[w] = target
+            ui.ok(f"{target} ({target.stat().st_size / 1e9:.2f} GB)")
+
+    if not a.no_verify:
+        step += 1
+        with ui.stage(step, total, "Verifying checksums"):
+            for w, path in zips.items():
+                if w == "fna.zip" and a.from_zip and path.stat().st_size != files[w]["size"]:
+                    ui.warn(f"{path.name}: size differs from figshare's copy; skipping the MD5 check")
+                    continue
+                with ui.spinner(f"MD5 of {path.name}"):
+                    got = fetchdb.md5_of(path)
+                if files[w]["md5"] and got != files[w]["md5"]:
+                    raise SystemExit(f"{path.name}: MD5 {got} does not match figshare's {files[w]['md5']} — "
+                                     f"delete the file and run fetch-db again")
+                ui.ok(f"{path.name}: MD5 ok")
+
+    step += 1
+    with ui.stage(step, total, "Unpacking the genomes"):
+        members = fetchdb.zip_members(zips["fna.zip"], suffixes=(".fna",))
+        with ui.progress() as prog:
+            task = prog.add_task("genomes", total=len(members))
+            fetchdb.extract_flat(zips["fna.zip"], dest / "fna", members, progress_cb=lambda n: prog.update(task, advance=n))
+        ui.ok(f"{len(members):,} FASTA files in {dest / 'fna'}")
+        for w, path in zips.items():
+            if w == "faa.zip":
+                mem = fetchdb.zip_members(path, suffixes=(".faa",))
+                with ui.progress() as prog:
+                    task = prog.add_task("proteins", total=len(mem))
+                    fetchdb.extract_flat(path, dest / "faa", mem, progress_cb=lambda n: prog.update(task, advance=n))
+                ui.ok(f"{len(mem):,} protein files in {dest / 'faa'}")
+        if not a.keep_zip:
+            for w, path in zips.items():
+                if path.parent == dest and path.suffix == ".zip":
+                    path.unlink()
+            ui.info("zip archive(s) deleted (--keep-zip keeps them)")
+
+    step += 1
+    with ui.stage(step, total, f"Registering {fetchdb.FIGSHARE_VERSION} as the current database"):
+        table = C.read_tsv(C.DB_TABLE_PATH)
+        have = {C.strip_fna(p.name) for p in (dest / "fna").glob("*.fna")}
+        want = {C.strip_fna(r["Name"]) for r in table}
+        if have != want:
+            ui.warn(f"{len(want - have)} table row(s) without FASTA and {len(have - want)} FASTA file(s) not in the table")
+        shutil.copy2(C.DB_TABLE_PATH, dest / C.RELEASE_TABLE)
+        C.save_json(dest / C.RELEASE_META, {
+            "version": fetchdb.FIGSHARE_VERSION, "date": time.strftime("%Y-%m-%d"), "previous_version": None,
+            "source": fetchdb.FIGSHARE_PAGE, "doi": fetchdb.FIGSHARE_DOI,
+            "files": {w: files[w]["md5"] for w in wanted}, "genomes": len(table), "tool_version": C.VERSION})
+        ui.ok(f"{len(table):,} genomes registered in {dest}")
+    _fetch_next_steps(ctx)
+    return 0
+
+
+def _fetch_next_steps(ctx: Context) -> None:
+    ui.console().print()
+    ui.ok("ArchaeaHQ is ready. To bring it up to date with NCBI:")
+    ui.kv("1. what is new", "python3 archaeahq_update.py check")
+    ui.kv("2. evaluate it", "python3 archaeahq_update.py run --threads 24")
+    ui.kv("3. next version", "python3 archaeahq_update.py release")
+    ui.info("the tools are installed with `python3 archaeahq_update.py setup` if you have not done it yet")
+
+
 def cmd_check(ctx: Context) -> int:
     ctx.run_name = f"check_{time.strftime('%Y-%m-%d')}"
     ctx.run_dir = ctx.workdir / "checks" / ctx.run_name
@@ -1181,8 +1331,8 @@ def main(argv=None) -> int:
     try:
         ctx = Context(args)
         t0 = time.time()
-        rc = {"setup": cmd_setup, "check": cmd_check, "run": cmd_run, "sketch-db": cmd_sketch_db,
-              "release": cmd_release}[args.command](ctx)
+        rc = {"setup": cmd_setup, "fetch-db": cmd_fetch_db, "check": cmd_check, "run": cmd_run,
+              "sketch-db": cmd_sketch_db, "release": cmd_release}[args.command](ctx)
         ui.console().print(f"\n[faint]total time {ui.fmt_duration(time.time() - t0)}[/]")
         return rc
     except C.CommandError as e:
