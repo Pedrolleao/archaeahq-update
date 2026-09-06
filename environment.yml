@@ -1,0 +1,21 @@
+# Conda environment for archaeahq-update.
+# Create with:  conda env create -f environment.yml      (or let `archaeahq_update.py setup` do it)
+name: archaeahq-update
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python>=3.12
+  - checkm2>=1.1          # completeness / contamination
+  - ncbi-datasets-cli>=18 # datasets + dataformat
+  - skani>=0.3            # ANI / aligned fraction against the database
+  - barrnap>=1.10         # rRNA (Infernal/Rfam) + tRNA (ARAGORN)
+  - aragorn               # fallback tRNA counting if an old barrnap is used
+  - rich>=13
+  - requests
+  - tqdm
+  - plotly>=5             # optional: Sankey figure
+  - pillow                # optional: Sankey PNG
+  - pip
+  - pip:
+      - kaleido==0.2.1    # optional: Sankey PNG export

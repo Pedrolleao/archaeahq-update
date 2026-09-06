@@ -1,0 +1,9 @@
+{
+  "_comment": "The four archaeal kingdoms used by ArchaeaHQ. taxid = NCBI Taxonomy ID used for `datasets summary genome taxon`. label = value of the Archaeal_Kingdom column. colour = hex used on vee-lab.eu/archaeahq.",
+  "kingdoms": [
+    {"short": "eury",   "taxid": 3366610, "label": "Methanobacteriati-Euryarchaeota", "name": "Methanobacteriati", "alias": "Euryarchaeota", "colour": "#5fa4ee"},
+    {"short": "tack",   "taxid": 1783275, "label": "Thermoproteati-TACK",            "name": "Thermoproteati",    "alias": "TACK",          "colour": "#858ef6"},
+    {"short": "dpann",  "taxid": 1783276, "label": "Nanobdellati-DPANN",             "name": "Nanobdellati",      "alias": "DPANN",         "colour": "#3427f0"},
+    {"short": "asgard", "taxid": 1935183, "label": "Promethearchaeati-Asgard",       "name": "Promethearchaeati", "alias": "Asgard",        "colour": "#914cf5"}
+  ]
+}

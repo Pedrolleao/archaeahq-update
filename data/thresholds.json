@@ -1,0 +1,29 @@
+{
+  "_comment": "All cut-offs used by archaeahq-update. They reproduce the ArchaeaHQ v1.0 build (CheckM2 quality gate; dRep-equivalent identity and species thresholds applied with skani).",
+  "quality": {
+    "min_completeness": 70.0,
+    "max_contamination": 10.0
+  },
+  "mimag": {
+    "high_min_completeness": 90.0,
+    "high_max_contamination": 5.0,
+    "medium_min_completeness": 50.0,
+    "medium_max_contamination": 10.0
+  },
+  "identity": {
+    "min_ani": 99.9,
+    "min_aligned_fraction": 99.0,
+    "_note": "plus the GCA/GCF same-numeric-accession rule (version-agnostic)"
+  },
+  "species": {
+    "min_ani": 95.0,
+    "min_aligned_fraction": 95.0
+  },
+  "park_score": {
+    "_formula": "completeness - 5 * contamination + 0.5 * log10(contig_N50)"
+  },
+  "download": {
+    "batch_size": 400,
+    "retries": 2
+  }
+}

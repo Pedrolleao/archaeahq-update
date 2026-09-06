@@ -1,0 +1,21 @@
+# Database versions built by `release` (tens of GB) and any unpacked v1.0 FASTA folder
+Archaea_HQ-v*/
+fna/
+fna_v*/
+
+# Work directory: runs, caches (CheckM2 database, skani sketches, taxonomy dump), ledger, logs
+archaeahq_update_work/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+@eaDir/
+Thumbs.db
