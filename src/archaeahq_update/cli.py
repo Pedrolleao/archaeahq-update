@@ -13,9 +13,9 @@ From a clone:         python3 archaeahq_update.py <command> ...
     archaeahq-update release                    apply the Add/Replace rows → next database version
 
 Database versions live in folders named Archaea_HQ-v<major>.<minor>/ next to the script (or in
---releases-dir), each with fna/, ArchaeaHQ-Info.tsv and release.json. All commands use the newest
-version automatically; `release` builds the next one and removes the superseded version once the
-new folder has been verified.
+--releases-dir), each with fna/, faa/, ArchaeaHQ-Info.tsv, Archaea_HQ-16S.fasta/.tsv and
+release.json. All commands use the newest version automatically; `run` only evaluates, `release`
+builds the next version and removes the superseded one once the new folder has been verified.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 from . import common as C
-from . import ui, envcheck, ncbi, rna, report, fetchdb
+from . import ui, envcheck, ncbi, proteins, rna, report, fetchdb
 from . import quality as Q
 from . import redundancy as R
 from .classify_environments import classify
@@ -140,11 +140,18 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--run", default=None, help="run whose recommendations are applied (default: newest run in the work directory)")
     s.add_argument("--table", default=None, help="full result table to apply instead of the one of --run")
     s.add_argument("--new-fna", default=None, help="folder with the FASTA of the new genomes (default: <run>/02_download/fna)")
+    s.add_argument("--new-gff", default=None,
+                   help="barrnap GFFs of the new genomes (default: <run>/06_rna/gff; genomes without one are run through barrnap)")
+    s.add_argument("--db-faa", default=None, help="protein folder of the current version (default: faa/ of the newest release)")
+    s.add_argument("--db-16s", default=None,
+                   help=f"16S rRNA FASTA of the current version (default: {C.RELEASE_16S_FASTA} of the newest release)")
+    s.add_argument("--no-faa", action="store_true", help="do not build faa/ (proteins) for the new version")
+    s.add_argument("--no-16s", action="store_true", help="do not build the 16S rRNA FASTA and table for the new version")
     s.add_argument("--accept", default=None,
                    help="file with one accession per line: apply only these Add/Replace rows (default: all)")
     s.add_argument("--version", dest="release_version", default=None,
                    help="label of the new version, e.g. v1.2 (default: current version + 0.1)")
-    s.add_argument("--copy", action="store_true", help="copy the FASTA files (default: hard links, copy if not possible)")
+    s.add_argument("--copy", action="store_true", help="copy the FASTA and protein files (default: hard links, copy if not possible)")
     s.add_argument("--dry-run", action="store_true", help="select and compare, but write and delete nothing")
     return p
 
@@ -1109,7 +1116,7 @@ def cmd_release(ctx: Context) -> int:
     a = ctx.args
     ctx.log_path = ctx.workdir / "release.log"
     C.setup_file_logging(ctx.workdir / "archaeahq_update.log")
-    total = 3 if a.dry_run else 5
+    total = 3 if a.dry_run else 7
 
     # ── inputs ───────────────────────────────────────────────────────────────
     db_fna = Path(a.db_fna).expanduser().resolve() if a.db_fna else ctx.default_db_fna()
@@ -1136,7 +1143,17 @@ def cmd_release(ctx: Context) -> int:
         raise SystemExit("the new version folder must be separate from the current FASTA folder")
     if out.exists() and any(out.iterdir()) and not a.dry_run:
         raise SystemExit(f"{out} exists and is not empty — remove it or pass --version/--out")
-    prev_release = old_table.parent if C.is_release_folder(old_table.parent) and db_fna == old_table.parent / "fna" else None
+    cur_folder = old_table.parent if C.is_release_folder(old_table.parent) else None
+    prev_release = cur_folder if cur_folder and db_fna == cur_folder / C.RELEASE_FNA else None
+    db_faa = db_16s = None
+    if not a.no_faa:
+        db_faa = Path(a.db_faa).expanduser().resolve() if a.db_faa else (cur_folder / C.RELEASE_FAA if cur_folder else None)
+        if a.db_faa and not db_faa.is_dir():
+            raise SystemExit(f"--db-faa {db_faa} is not a folder")
+    if not a.no_16s:
+        db_16s = Path(a.db_16s).expanduser().resolve() if a.db_16s else (cur_folder / C.RELEASE_16S_FASTA if cur_folder else None)
+        if a.db_16s and not db_16s.is_file():
+            raise SystemExit(f"--db-16s {db_16s} not found")
     if a.table:
         table = Path(a.table).expanduser().resolve()
         run_dir = table.parent
@@ -1151,6 +1168,8 @@ def cmd_release(ctx: Context) -> int:
     new_fna = Path(a.new_fna).expanduser().resolve() if a.new_fna else run_dir / "02_download" / "fna"
     if not new_fna.is_dir():
         raise SystemExit(f"folder with the new genomes not found: {new_fna} (pass --new-fna)")
+    new_gff = Path(a.new_gff).expanduser().resolve() if a.new_gff else run_dir / "06_rna" / "gff"
+    staging = ctx.workdir / "release_staging" / C.release_folder_name(new_label)
     ui.kv("current version", ctx.describe_db())
     ui.kv("current FASTA", db_fna)
     ui.kv("recommendations", table)
@@ -1161,6 +1180,7 @@ def cmd_release(ctx: Context) -> int:
     with ui.stage(1, total, "Reading the current database"):
         with ui.spinner("indexing the FASTA folder"):
             old_files = _fna_index(db_fna)
+            old_faa = proteins.faa_index(db_faa) if db_faa else {}
         missing_old = [r["Assembly ID"] for r in ctx.db_rows if C.strip_fna(r["Name"]) not in old_files]
         orphans = set(old_files) - {C.strip_fna(r["Name"]) for r in ctx.db_rows}
         ui.ok(f"{len(ctx.db_rows):,} table rows, {len(old_files):,} FASTA files")
@@ -1168,6 +1188,20 @@ def cmd_release(ctx: Context) -> int:
             ui.warn(f"{len(missing_old)} table row(s) have no FASTA file in {db_fna}; their rows are kept, no file is written")
         if orphans:
             ui.warn(f"{len(orphans)} FASTA file(s) are not in the table and are not carried over")
+        if a.no_faa:
+            ui.info("proteins: not built (--no-faa)")
+        else:
+            ui.ok(f"{len(old_faa):,} protein files" + (f" in {db_faa}" if db_faa else ""))
+        has_old_16s = bool(db_16s and db_16s.is_file())
+        old_16s: List[tuple] = []                 # (genome Name, sequence ID, sequence)
+        if a.no_16s:
+            ui.info("16S rRNA: not built (--no-16s)")
+        elif has_old_16s:
+            old_16s = [(rna.genome_of_seq_id(h), h, s) for h, s in rna.read_fasta(db_16s)]
+            ui.ok(f"{len(old_16s):,} 16S rRNA sequences in {db_16s}")
+        else:
+            ui.warn(f"no 16S rRNA FASTA for {old_label} ({db_16s or 'no version folder'}): barrnap will be run "
+                    f"on every genome of the database (pass --db-16s, or --no-16s)")
 
     # ── 2. selection ─────────────────────────────────────────────────────────
     with ui.stage(2, total, "Selecting the recommended genomes"):
@@ -1220,63 +1254,151 @@ def cmd_release(ctx: Context) -> int:
                             "Name": ctx.db_by_acc[old]["Name"], "Replaces": "", "Source_run": run_dir.name,
                             "Note": f"superseded by {replaced[old]['Assembly ID']}"})
 
-    # new table: old order kept, a replacement takes the place of the old row, additions appended per kingdom
-    new_rows: List[dict] = []
-    for r in ctx.db_rows:
-        acc = r["Assembly ID"]
-        new_rows.append({c: replaced[acc].get(c, "") for c in C.DB_COLUMNS} if acc in replaced else r)
-    order = {k: i for i, k in enumerate(ctx.kingdom_labels)}
-    for r, _, old in sorted(additions, key=lambda t: (order.get(t[0]["Archaeal_Kingdom"], 99), t[0]["Assembly ID"])):
-        if not old:
-            new_rows.append({c: r.get(c, "") for c in C.DB_COLUMNS})
-    src_by_name = {C.strip_fna(r["Name"]): src for r, src, _ in additions}
-    new_files_all = {**{C.strip_fna(r["Name"]): old_files[C.strip_fna(r["Name"])] for r in new_rows
-                        if C.strip_fna(r["Name"]) in old_files and C.strip_fna(r["Name"]) not in src_by_name},
-                     **src_by_name}
+        # new table: old order kept, a replacement takes the place of the old row, additions appended per kingdom
+        new_rows: List[dict] = []
+        for r in ctx.db_rows:
+            acc = r["Assembly ID"]
+            new_rows.append({c: replaced[acc].get(c, "") for c in C.DB_COLUMNS} if acc in replaced else r)
+        order = {k: i for i, k in enumerate(ctx.kingdom_labels)}
+        for r, _, old in sorted(additions, key=lambda t: (order.get(t[0]["Archaeal_Kingdom"], 99), t[0]["Assembly ID"])):
+            if not old:
+                new_rows.append({c: r.get(c, "") for c in C.DB_COLUMNS})
+        src_by_name = {C.strip_fna(r["Name"]): src for r, src, _ in additions}
+        kept_old = {C.strip_fna(r["Name"]) for r in new_rows} - set(src_by_name)      # genomes carried from the current version
+        new_files_all = {**{n: old_files[n] for n in sorted(kept_old) if n in old_files}, **src_by_name}
+
+        # sequence files: what is carried over and what has to be computed
+        carried_faa = {n: old_faa[n] for n in new_files_all if n in kept_old and n in old_faa}
+        to_predict = [p for n, p in new_files_all.items() if n not in carried_faa] if not a.no_faa else []
+        to_barrnap: List[Path] = []
+        if not a.no_16s:
+            to_barrnap = [p for n, p in new_files_all.items()
+                          if (n in src_by_name and not rna._gff_path(new_gff, p).exists())
+                          or (n in kept_old and not has_old_16s)]
+        if not a.no_faa:
+            msg = f"proteins: {len(carried_faa):,} carried over, {len(to_predict):,} to predict with Prodigal ({proteins.PRODIGAL_MODE} mode)"
+            (ui.warn if len(to_predict) > len(src_by_name) else ui.info)(
+                msg + (f" — about {_eta(len(to_predict), 5, a.threads)}" if to_predict else ""))
+        if not a.no_16s:
+            n_gff = sum(1 for n, p in src_by_name.items() if rna._gff_path(new_gff, p).exists())
+            ui.info(f"16S rRNA: barrnap GFFs of the run for {n_gff:,} of {len(src_by_name):,} new genome(s)"
+                    + (f"; barrnap to run on {len(to_barrnap):,} genome(s) — about {_eta(len(to_barrnap), 20, a.threads)}"
+                       if to_barrnap else ""))
 
     # ── 3. build the folder ──────────────────────────────────────────────────
     stage_no = 3
+    faa_stats: Dict[str, int] = {}
+    rrna_stats: Dict[str, int] = {}
     if not a.dry_run:
+        needed = (["prodigal"] if to_predict else []) + (["barrnap"] if to_barrnap else [])
+        if needed:
+            ctx.tools = envcheck.resolve_tools(needed, [], auto_install=not a.no_install, env_name=a.conda_env,
+                                               log_path=ctx.log_path, ui=ui)
         with ui.stage(stage_no, total, f"Building {out}"):
             stage_no += 1
-            fna_out = out / "fna"
+            fna_out = out / C.RELEASE_FNA
             fna_out.mkdir(parents=True, exist_ok=True)
             n_link = n_copy = 0
-            with ui.progress() as prog:
-                task = prog.add_task("copying FASTA files" if a.copy else "linking FASTA files", total=len(new_files_all))
+            with ui.progress() as bar:
+                task = bar.add_task("copying FASTA files" if a.copy else "linking FASTA files", total=len(new_files_all))
                 for name, src in new_files_all.items():
                     how = _place(src, fna_out / src.name, a.copy)
                     n_link += how == "link"
                     n_copy += how == "copy"
-                    prog.update(task, advance=1)
-            C.write_tsv(out / "ArchaeaHQ-Info.tsv", new_rows, C.DB_COLUMNS)
+                    bar.update(task, advance=1)
+            C.write_tsv(out / C.RELEASE_TABLE, new_rows, C.DB_COLUMNS)
             C.write_tsv(out / "release_changes.tsv", changes, CHANGE_COLUMNS)
-            C.save_json(out / "release.json", {
-                "version": new_label, "date": time.strftime("%Y-%m-%d"), "previous_version": old_label,
-                "previous_table": str(old_table), "previous_fna": str(db_fna),
-                "previous_removed": False, "source_run": run_dir.name,
-                "source_table": str(table), "genomes": len(new_rows),
-                "added": n_add, "replaced": n_rep, "removed": len(replaced), "skipped": n_skip,
-                "fasta_hardlinked": n_link, "fasta_copied": n_copy, "tool_version": C.VERSION})
             ui.ok(f"{len(new_files_all):,} FASTA files in {fna_out} ({n_link:,} hard-linked, {n_copy:,} copied)")
-            ui.ok(f"{len(new_rows):,} rows in {out / 'ArchaeaHQ-Info.tsv'}")
+            ui.ok(f"{len(new_rows):,} rows in {out / C.RELEASE_TABLE}")
 
-    # ── 4. comparison ────────────────────────────────────────────────────────
+        # ── 4. proteins ──────────────────────────────────────────────────────
+        with ui.stage(stage_no, total, "Proteins (Prodigal)"):
+            stage_no += 1
+            if a.no_faa:
+                ui.info("skipped (--no-faa)")
+            else:
+                predicted: Dict[str, Path] = {}
+                if to_predict:
+                    with ui.progress() as bar:
+                        task = bar.add_task(f"prodigal -p {proteins.PRODIGAL_MODE}", total=len(to_predict))
+                        predicted = proteins.predict_all(ctx.tools, to_predict, staging / "faa", a.threads, ctx.log_path,
+                                                         progress_cb=lambda n: bar.update(task, advance=n))
+                faa_out = out / C.RELEASE_FAA
+                faa_out.mkdir(parents=True, exist_ok=True)
+                for name, src in {**carried_faa, **predicted}.items():
+                    _place(src, faa_out / src.name, a.copy)
+                faa_stats = {"carried": len(carried_faa), "predicted": len(predicted),
+                             "missing": len(new_files_all) - len(carried_faa) - len(predicted)}
+                ui.ok(f"{len(carried_faa) + len(predicted):,} protein files in {faa_out} "
+                      f"({len(carried_faa):,} carried over, {len(predicted):,} predicted)")
+                if faa_stats["missing"]:
+                    ui.warn(f"Prodigal failed on {faa_stats['missing']} genome(s); see {ctx.log_path}")
+
+        # ── 5. 16S rRNA ──────────────────────────────────────────────────────
+        with ui.stage(stage_no, total, "16S rRNA sequences"):
+            stage_no += 1
+            if a.no_16s:
+                ui.info("skipped (--no-16s)")
+            else:
+                if to_barrnap:
+                    new_b = envcheck.barrnap_has_trna(ctx.tools["barrnap"])
+                    with ui.progress() as bar:
+                        task = bar.add_task("barrnap", total=len(to_barrnap))
+                        rna.run_all(ctx.tools, to_barrnap, staging / "gff", a.threads, new_b, ctx.log_path,
+                                    progress_cb=lambda n: bar.update(task, advance=n))
+                in_run = [p for n, p in src_by_name.items() if rna._gff_path(new_gff, p).exists()]
+                records = [rec for rec in old_16s if rec[0] in kept_old]
+                with ui.spinner("cutting the 16S rRNA genes out of the genomes"):
+                    records += list(rna.iter_rrna(in_run, new_gff))
+                    records += list(rna.iter_rrna(to_barrnap, staging / "gff"))
+                records.sort(key=lambda rec: rec[0])
+                counts = rna.write_rrna(records, out / C.RELEASE_16S_FASTA, out / C.RELEASE_16S_TABLE)
+                rrna_stats = {"sequences": sum(counts.values()), "genomes": len(counts),
+                              "from_previous": sum(1 for rec in records if rec[0] in kept_old and has_old_16s)}
+                ui.ok(f"{rrna_stats['sequences']:,} 16S rRNA sequences from {rrna_stats['genomes']:,} genomes "
+                      f"in {out / C.RELEASE_16S_FASTA} (+ {C.RELEASE_16S_TABLE})")
+
+        C.save_json(out / C.RELEASE_META, {
+            "version": new_label, "date": time.strftime("%Y-%m-%d"), "previous_version": old_label,
+            "previous_table": str(old_table), "previous_fna": str(db_fna),
+            "previous_removed": False, "source_run": run_dir.name,
+            "source_table": str(table), "genomes": len(new_rows),
+            "added": n_add, "replaced": n_rep, "removed": len(replaced), "skipped": n_skip,
+            "fasta_hardlinked": n_link, "fasta_copied": n_copy,
+            "proteins": {**faa_stats, "prodigal_mode": proteins.PRODIGAL_MODE} if faa_stats else None,
+            "rrna_16s": rrna_stats or None, "tool_version": C.VERSION})
+
+    # ── 6. comparison ────────────────────────────────────────────────────────
     with ui.stage(stage_no, total, f"Comparing {old_label} with {new_label}"):
         lines = _release_compare(ctx, old_label, new_label, ctx.db_rows, new_rows, old_files, new_files_all, changes)
         if not a.dry_run:
+            seq_rows = [["genome FASTA files", f"{len(old_files):,}", f"{len(new_files_all):,}"]]
+            if faa_stats:
+                seq_rows.append(["protein files", f"{len(old_faa):,}", f"{faa_stats['carried'] + faa_stats['predicted']:,}"])
+            if rrna_stats:
+                old_seq = f"{len(old_16s):,}" if has_old_16s else C.NOT_AVAILABLE
+                old_gen = f"{len({rec[0] for rec in old_16s}):,}" if has_old_16s else C.NOT_AVAILABLE
+                seq_rows += [["16S rRNA sequences", old_seq, f"{rrna_stats['sequences']:,}"],
+                             ["genomes with a 16S rRNA sequence", old_gen, f"{rrna_stats['genomes']:,}"]]
+            ui.table("Sequence files", ["file", old_label, new_label], seq_rows)
+            lines += [""] + _plain_table(["file", old_label, new_label], seq_rows)
             C.write_lines(out / "comparison.txt", lines)
             ui.kv("comparison", out / "comparison.txt")
             ui.kv("changes", out / "release_changes.tsv")
         else:
             ui.info("dry run: nothing written")
 
-    # ── 5. remove the superseded version ─────────────────────────────────────
+    # ── 7. remove the superseded version ─────────────────────────────────────
     if a.dry_run:
         return 0
+    shutil.rmtree(staging, ignore_errors=True)
+    try:
+        staging.parent.rmdir()                            # only when no other release is in progress
+    except OSError:
+        pass
     with ui.stage(stage_no + 1, total, f"Removing the superseded version {old_label}"):
         removed = _remove_previous(ctx, out, prev_release, db_fna, old_files, new_files_all, orphans, missing_old,
-                                   keep=a.keep_previous)
+                                   carried_faa, keep=a.keep_previous)
         meta = C.load_json(out / C.RELEASE_META)
         meta["previous_removed"] = removed
         C.save_json(out / C.RELEASE_META, meta)
@@ -1284,13 +1406,25 @@ def cmd_release(ctx: Context) -> int:
     if ok_next:
         ui.ok(f"{new_label} is now the current database: `run`, `check` and `release` use {out} automatically")
     else:
-        ui.info(f"next runs: `{prog()} run --db-table {out / C.RELEASE_TABLE} --db-fna {out / 'fna'}`")
+        ui.info(f"next runs: `{prog()} run --db-table {out / C.RELEASE_TABLE} --db-fna {out / C.RELEASE_FNA}`")
     return 0
 
 
+def _eta(n: int, sec_per_genome: float, threads: int) -> str:
+    """Rough wall-clock estimate for n single-threaded jobs run on `threads` workers."""
+    return ui.fmt_duration(max(60.0, n * sec_per_genome / max(1, threads)))
+
+
+# files a version folder may hold that the next version rebuilds; anything else keeps the folder
+RELEASE_FILES = {C.RELEASE_FNA, C.RELEASE_FAA, C.RELEASE_TABLE, C.RELEASE_META, C.RELEASE_16S_FASTA,
+                 C.RELEASE_16S_TABLE, "release_changes.tsv", "comparison.txt"}
+
+
 def _remove_previous(ctx: Context, out: Path, prev_release: Optional[Path], db_fna: Path, old_files: Dict[str, Path],
-                     new_files: Dict[str, Path], orphans: set, missing_old: List[str], keep: bool) -> bool:
+                     new_files: Dict[str, Path], orphans: set, missing_old: List[str], carried_faa: Dict[str, Path],
+                     keep: bool) -> bool:
     """Delete the previous version once every genome it contributed is verified in the new folder. True if removed."""
+    a = ctx.args
     target = prev_release or db_fna
     what = f"release folder {target}" if prev_release else f"FASTA folder {target}"
     protected = {C.BUNDLE_DIR.resolve(), C.DATA_DIR.resolve(), ctx.workdir, ctx.releases_dir, out}
@@ -1303,18 +1437,25 @@ def _remove_previous(ctx: Context, out: Path, prev_release: Optional[Path], db_f
     if orphans:
         ui.warn(f"not removed: {what} holds {len(orphans)} FASTA file(s) that are not in the table; delete it by hand")
         return False
+    if prev_release:
+        extra = sorted(p.name for p in prev_release.iterdir() if p.name not in RELEASE_FILES)
+        extra += [n for n, off in ((C.RELEASE_FAA, a.no_faa), (C.RELEASE_16S_FASTA, a.no_16s))
+                  if off and (prev_release / n).exists()]
+        if extra:
+            ui.warn(f"not removed: {what} holds files the new version does not include ({', '.join(extra)}); "
+                    f"move them and delete the folder by hand")
+            return False
+    checks = [(src, out / C.RELEASE_FNA / src.name) for name, src in old_files.items() if name in new_files]
+    checks += [(src, out / C.RELEASE_FAA / src.name) for src in carried_faa.values() if target in src.parents]
     bad = []
-    for name, src in old_files.items():
-        if name not in new_files:
-            continue                          # replaced genome: intentionally dropped
-        dst = out / "fna" / src.name
+    for src, dst in checks:
         try:
             if not dst.is_file() or dst.stat().st_size != src.stat().st_size:
-                bad.append(name)
+                bad.append(src.name)
         except OSError:
-            bad.append(name)
+            bad.append(src.name)
     if bad:
-        ui.warn(f"not removed: {len(bad)} genome(s) of the previous version are missing or differ in the new folder")
+        ui.warn(f"not removed: {len(bad)} file(s) of the previous version are missing or differ in the new folder")
         return False
     with ui.spinner(f"deleting {what}"):
         shutil.rmtree(target)

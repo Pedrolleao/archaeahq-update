@@ -54,10 +54,15 @@ FILTER_COLUMNS: List[str] = [
 
 STAGES: List[str] = ["env", "list", "download", "metadata", "quality", "redundancy", "rna", "report"]
 
-# Database release folders: <releases dir>/Archaea_HQ-v<major>.<minor>/{fna/, ArchaeaHQ-Info.tsv, release.json}
+# Database release folders: <releases dir>/Archaea_HQ-v<major>.<minor>/
+#   {fna/, faa/, ArchaeaHQ-Info.tsv, Archaea_HQ-16S.fasta, Archaea_HQ-16S.tsv, release.json}
 RELEASE_PREFIX = "Archaea_HQ-v"
 RELEASE_TABLE = "ArchaeaHQ-Info.tsv"
 RELEASE_META = "release.json"
+RELEASE_FNA = "fna"
+RELEASE_FAA = "faa"
+RELEASE_16S_FASTA = "Archaea_HQ-16S.fasta"      # same name as the v1.0 file on figshare
+RELEASE_16S_TABLE = "Archaea_HQ-16S.tsv"        # Genome, Sequence_ID, Length_bp (Supplementary Table 5)
 BUNDLED_VERSION = "v1.0"
 
 

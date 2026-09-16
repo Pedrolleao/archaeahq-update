@@ -11,6 +11,7 @@ dependencies:
   - skani>=0.3            # ANI / aligned fraction against the database
   - barrnap>=1.10         # rRNA (Infernal/Rfam) + tRNA (ARAGORN)
   - aragorn               # fallback tRNA counting if an old barrnap is used
+  - prodigal>=2.6.3       # proteins of a new database version (meta mode, as in v1.0)
   - rich>=13
   - requests
   - tqdm

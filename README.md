@@ -166,12 +166,16 @@ and the run) and `cache/` (metadata cache, taxonomy dump, CheckM2 database, data
 
 ## 5. Database versions and the `release` command
 
-A database version is a folder `Archaea_HQ-v<major>.<minor>/` containing:
+`run` only evaluates: it never writes database files. A new database version exists only once
+`release` is run. A database version is a folder `Archaea_HQ-v<major>.<minor>/` containing:
 
 | File | Content |
 |---|---|
-| `fna/` | one FASTA per genome |
+| `fna/` | one genome FASTA per genome |
+| `faa/` | one protein FASTA per genome (Prodigal 2.6.3, metagenome mode `-p meta`, as for v1.0) |
 | `ArchaeaHQ-Info.tsv` | the information table of that version (25 columns) |
+| `Archaea_HQ-16S.fasta` | 16S rRNA sequences, headers `>Name#scaffold#start-stop#strand#16S_rRNA` (as in the v1.0 file); reverse-complemented on the minus strand, genomes without a barrnap 16S hit are absent, hits at contig ends are partial |
+| `Archaea_HQ-16S.tsv` | one row per 16S sequence: `Genome`, `Sequence_ID`, `Length_bp` (layout of Supplementary Table 5) |
 | `release_changes.tsv` | every applied or skipped recommendation: `added`, `replaced`, `removed`, `skipped`, with the reason |
 | `release.json` | version label, date, previous version, source run, counts |
 | `comparison.txt` | the old-vs-new comparison printed at the end of `release` |
@@ -185,15 +189,28 @@ rows to the current version and writes the next one (minor version + 1) into `--
   the new version takes its place.
 * Rows already in the database or without a FASTA file are skipped and listed. If nothing applies,
   no folder is written.
-* FASTA files are hard-linked when the new folder is on the same file system as the current one
-  (instant, no extra space), otherwise copied (`--copy` forces copies).
+* FASTA and protein files are hard-linked when the new folder is on the same file system as the
+  current one (instant, no extra space), otherwise copied (`--copy` forces copies).
+* **Proteins**: the protein files of the current version (`faa/`, or `--db-faa`) are carried over;
+  Prodigal predicts the proteins of the added genomes and of any carried genome without a protein
+  file (a few seconds per genome, run on `--threads`). On a first release from a v1.0 folder
+  fetched without `--extras faa`, that means the whole database (about an hour on 30 threads).
+* **16S rRNA**: the sequences of the current version (`Archaea_HQ-16S.fasta`, or `--db-16s`) are
+  carried over, minus those of replaced genomes; the new genomes' 16S genes are cut out of their
+  FASTA at the coordinates barrnap found during `run` (`<run>/06_rna/gff`). Genomes without a GFF
+  (e.g. a run with `--no-rna`) go through barrnap first; without a 16S FASTA for the current
+  version, barrnap runs on the whole database (hours). `--no-faa` / `--no-16s` skip either part.
+* Work in progress (Prodigal and barrnap output) is kept in `<workdir>/release_staging/` so an
+  interrupted release resumes; it is deleted once the release succeeds.
 * Once the new folder is verified (every carried genome present with the same name and size),
   the **superseded version is deleted** — `--keep-previous` keeps it. A folder holding FASTA files
-  that are not in the table is never deleted automatically, and the repository's `data/` folder is
-  never touched. On the first release the `Archaea_HQ-v1.0/` folder made by `fetch-db` (or the
+  that are not in the table, or any file the new version does not rebuild (e.g. the supplementary
+  tables, a kept zip, or `faa/` when `--no-faa` was given), is never deleted automatically, and the
+  repository's `data/` folder is never touched. On the first release the `Archaea_HQ-v1.0/` folder made by `fetch-db` (or the
   unpacked folder given with `--db-fna`) is the one removed; the v1.0 table stays in `data/`.
 * The comparison between the two versions (genomes per kingdom, quality and size statistics,
-  environment categories) is printed and saved as `comparison.txt`.
+  environment categories, number of genome/protein/16S sequence files) is printed and saved as
+  `comparison.txt`.
 
 ```
                     Genomes per kingdom
@@ -217,8 +234,9 @@ archaeahq_update.py run        [--db-fna DIR | --db-sketch DIR] [--max-genomes N
                                [--reevaluate] [--include-twins] [--from-stage STAGE] [--run-name NAME]
                                [--no-rna] [--sankey] [--lowmem]
 archaeahq_update.py sketch-db  --out DIR [--db-fna DIR]
-archaeahq_update.py release    [--run NAME | --table F] [--new-fna DIR] [--accept F] [--version vX.Y]
-                               [--keep-previous] [--copy] [--dry-run] [--db-fna DIR] [--out DIR]
+archaeahq_update.py release    [--run NAME | --table F] [--new-fna DIR] [--new-gff DIR] [--accept F]
+                               [--version vX.Y] [--keep-previous] [--copy] [--dry-run] [--db-fna DIR]
+                               [--db-faa DIR] [--db-16s F] [--no-faa] [--no-16s] [--out DIR]
 ```
 
 **Common options** (every command)
@@ -282,13 +300,17 @@ defaults to the newest version).
 | `--run NAME` | apply this run (default: the newest run in the work directory) |
 | `--table F` | apply any full result table instead |
 | `--new-fna DIR` | FASTA of the new genomes (default: `<run>/02_download/fna`) |
+| `--new-gff DIR` | barrnap GFFs of the new genomes (default: `<run>/06_rna/gff`) |
 | `--accept F` | apply only the accessions listed in this file |
 | `--version vX.Y` | label of the new version (default: current + 0.1; must be newer) |
 | `--out DIR` | destination (default: `<releases-dir>/Archaea_HQ-v<version>`) |
 | `--keep-previous` | do not delete the superseded version |
-| `--copy` | copy FASTA files instead of hard-linking |
+| `--copy` | copy FASTA and protein files instead of hard-linking |
 | `--dry-run` | show the selection and the comparison; write and delete nothing |
 | `--db-fna DIR` | FASTA folder of the current version (needed on the first release from v1.0) |
+| `--db-faa DIR` | protein folder of the current version (default: its `faa/`) |
+| `--db-16s F` | 16S rRNA FASTA of the current version (default: its `Archaea_HQ-16S.fasta`) |
+| `--no-faa` / `--no-16s` | do not build the proteins / the 16S files of the new version |
 
 Every external command and its output is appended to `runs/<run>/commands.log`; the tool's own
 log is `runs/<run>/archaeahq_update.log`.
@@ -306,7 +328,8 @@ archaeahq-update/
 ├── assets/                      ArchaeaHQ logo
 ├── src/archaeahq_update/
 │   ├── cli.py                   commands, stages, report assembly, release
-│   ├── common.py  ui.py  envcheck.py  ncbi.py  quality.py  redundancy.py  rna.py  report.py  fetchdb.py
+│   ├── common.py  ui.py  envcheck.py  ncbi.py  quality.py  redundancy.py  rna.py  proteins.py
+│   ├── report.py  fetchdb.py
 │   ├── classify_environments.py environment classifier (as used for the paper)
 │   ├── compile_barrnap.py       GFF → RNA counts (as used for the paper)
 │   ├── sankey_generic.py        Sankey figure
@@ -316,7 +339,7 @@ archaeahq-update/
 │       ├── evaluated_accessions.tsv     the 35,993 assemblies evaluated for v1.0 and their decision
 │       ├── kingdoms.json                taxids, labels, colours of the four kingdoms
 │       ├── thresholds.json              every cut-off
-│       └── environment.yml              conda environment (checkm2, ncbi-datasets-cli, skani, barrnap …)
+│       └── environment.yml              conda environment (checkm2, ncbi-datasets-cli, skani, barrnap, prodigal …)
 ├── tests/                       pytest suite (`pip install -e .[test] && pytest`)
 ├── Archaea_HQ-v1.1/             (not in git) your current database version (`fetch-db` → v1.0, `release` → v1.1, …)
 └── archaeahq_update_work/       (not in git) runs, caches, ledger
@@ -338,6 +361,6 @@ archaeahq-update/
 **Citation.** ArchaeaHQ — Leão P. et al., *A quality-controlled, systematically curated reference
 database of archaeal genomes* (in preparation); dataset DOI 10.6084/m9.figshare.32266599.
 Tools: CheckM2 (Chklovski et al. 2023), skani (Shaw & Yu 2023), barrnap (Seemann) and ARAGORN
-(Laslett & Canback 2004), NCBI Datasets.
+(Laslett & Canback 2004), Prodigal (Hyatt et al. 2010), NCBI Datasets.
 
 Created at Vee Lab - Radboud University.

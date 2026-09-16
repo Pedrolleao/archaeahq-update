@@ -24,7 +24,7 @@ from typing import Dict, List, Optional, Sequence
 from .common import BUNDLE_DIR, ENVIRONMENT_YML, CommandError, log, run_cmd
 
 DEFAULT_ENV_NAME = "archaeahq-update"
-REQUIRED_TOOLS = ["datasets", "dataformat", "checkm2", "skani", "barrnap"]
+REQUIRED_TOOLS = ["datasets", "dataformat", "checkm2", "skani", "barrnap", "prodigal"]
 OPTIONAL_TOOLS = ["aragorn"]
 CHECKM2_DB_FILE = "uniref100.KO.1.dmnd"
 
@@ -102,7 +102,7 @@ def env_prefix_named(conda: str, name: str) -> Optional[str]:
 def _version_of(cmd: List[str], name: str) -> str:
     flags = {
         "datasets": [["--version"], ["version"]], "dataformat": [["--version"], ["version"]],
-        "checkm2": [["--version"]], "skani": [["--version"]], "barrnap": [["--version"]], "aragorn": [["-h"]],
+        "checkm2": [["--version"]], "skani": [["--version"]], "barrnap": [["--version"]], "aragorn": [["-h"]], "prodigal": [["-v"]],
     }
     for fl in flags.get(name, [["--version"]]):
         try:

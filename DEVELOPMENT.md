@@ -147,10 +147,19 @@ No file in the bundle references a path outside it (checked with `grep` for `/ho
 * `release` — applies the `Add`/`Replace` rows of a run's full table to the current database
   version and writes the next one into `<releases-dir>/Archaea_HQ-v<major>.<minor>/` (`fna/` with
   hard links when on the same file system, else copies; `ArchaeaHQ-Info.tsv`, `release_changes.tsv`,
-  `release.json`, `comparison.txt`). Prints the old-vs-new comparison (per kingdom, summary
+  `release.json`, `comparison.txt`, and since 1.2.0 `faa/`, `Archaea_HQ-16S.fasta` and
+  `Archaea_HQ-16S.tsv`). Proteins of the carried genomes are hard-linked from the current version;
+  added genomes (and carried ones without a protein file) go through `prodigal -p meta`
+  (`proteins.py`) — CheckM2's own `protein_files/` are not reused because CheckM2 runs Prodigal in
+  single mode (and may choose translation table 4), unlike the v1.0 proteins. 16S sequences of the
+  carried genomes are copied from the current FASTA; those of added genomes are cut from their
+  FASTA at the barrnap GFF coordinates of the run (`rna.iter_rrna`), which reproduces the v1.0
+  headers. Prodigal/barrnap work goes to `<workdir>/release_staging/<version>/` (resumable,
+  removed on success). `run` itself never writes database files. Prints the old-vs-new comparison (per kingdom, summary
   statistics, environment categories), then deletes the superseded version folder after verifying
-  every carried genome (name + size) in the new folder (`--keep-previous` to skip; folders with
-  orphan FASTA files, the bundle, `data/` and the work directory are never deleted). Version
+  every carried genome and protein file (name + size) in the new folder (`--keep-previous` to skip;
+  folders with orphan FASTA files or with files the new version does not rebuild, the bundle,
+  `data/` and the work directory are never deleted). Version
   discovery is in `common.py` (`find_releases`, `newest_release`, `release_version_of_table`); the
   `Context` resolves `--db-table`/`--db-fna` defaults from the newest release. Genome names are
   matched with `strip_fna` on both sides because 480 rows of the v1.0 table carry a `.fna` suffix
@@ -308,6 +317,5 @@ CheckM2 (~1 min per 30 genomes on 24 threads).
 * **Column layout** is `common.DB_COLUMNS`; `report.FULL_COLUMNS` prepends Recommendation/Reason.
 * To evaluate arbitrary genomes (e.g. a collaborator's MAGs already at NCBI) use
   `run --accessions-file`; the ledger is ignored for that list.
-* Possible future work: an `--apply` mode that appends `Add` rows to the table and copies FASTA
-  files; running Prodigal for the accepted genomes; a `replace` recommendation when a new genome
-  of an existing species has a clearly better Park score.
+* Possible future work: a `replace` recommendation when a new genome of an existing species has a
+  clearly better Park score.

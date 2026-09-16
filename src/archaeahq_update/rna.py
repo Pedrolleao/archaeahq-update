@@ -9,17 +9,22 @@ original build.
 
 Every barrnap process runs in its own temporary working directory: barrnap 1.x writes fixed-name
 scratch files (e.g. barrnap.find_operon.gff) into the current directory, which breaks parallel runs.
+
+The 16S rRNA sequences of a database version (built by `release`) are cut from the genomes at the
+GFF coordinates (reverse-complemented on the minus strand) with the header layout of the v1.0
+`Archaea_HQ-16S.fasta`: `>Name#scaffold#start-stop#strand#16S_rRNA`.
 """
 
 from __future__ import annotations
 
+import gzip
 import re
 import shutil
 import subprocess
 import tempfile
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Callable, Collection, Dict, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 from .common import CommandError, log, run_cmd, strip_fna
 from . import compile_barrnap as cb
@@ -109,3 +114,114 @@ def run_all(tools, fnas: Sequence[Path], out_dir: Path, threads: int, new_barrna
             if progress_cb:
                 progress_cb(1)
     return results
+
+
+# ─── rRNA sequences ──────────────────────────────────────────────────────────
+
+_COMPLEMENT = str.maketrans("ACGTacgtNnRrYyKkMmSsWwBbDdHhVv",
+                            "TGCAtgcaNnYyRrMmKkSsWwVvHhDdBb")
+
+
+def reverse_complement(seq: str) -> str:
+    return seq.translate(_COMPLEMENT)[::-1]
+
+
+def _rrna_name(info: str) -> str:
+    for part in info.split(";"):
+        if part.startswith("Name="):
+            return part[5:].strip()
+    return ""
+
+
+def _read_scaffolds(fna: Path, wanted: Collection[str]) -> Dict[str, str]:
+    """Sequences of the wanted scaffolds only (ID = first header token); stops once all are read."""
+    wanted = set(wanted)
+    seqs: Dict[str, str] = {}
+    cur: Optional[str] = None
+    buf: List[str] = []
+    opener = gzip.open if fna.name.endswith(".gz") else open
+    with opener(fna, "rt", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if line.startswith(">"):
+                if cur is not None:
+                    seqs[cur] = "".join(buf)
+                    if len(seqs) == len(wanted):
+                        return seqs
+                tok = line[1:].split()
+                cur = tok[0] if tok and tok[0] in wanted else None
+                buf = []
+            elif cur is not None:
+                buf.append(line.strip())
+    if cur is not None:
+        seqs[cur] = "".join(buf)
+    return seqs
+
+
+def iter_rrna(fnas: Sequence[Path], gff_dir: Path, rrna: str = "16S_rRNA") -> Iterator[Tuple[str, str, str]]:
+    """
+    (genome Name, sequence ID, sequence) for every `rrna` gene (barrnap Name=, e.g. 16S_rRNA) in the
+    GFFs of `fnas`, genomes in name order. Genomes without a GFF or without a hit yield nothing.
+    """
+    for fna in sorted(fnas, key=lambda p: p.name):
+        name = strip_fna(fna.name)
+        gff = _gff_path(gff_dir, fna)
+        if not gff.exists():
+            continue
+        hits = [r for r in cb.parse_gff_file(str(gff))
+                if r["rna_type"] == "rRNA" and _rrna_name(r["info"]) == rrna]
+        if not hits:
+            continue
+        scaffolds = _read_scaffolds(fna, {r["scaffold"] for r in hits})
+        for r in hits:
+            if r["scaffold"] not in scaffolds:
+                log.warning("%s: scaffold %s of a %s hit not found in %s", name, r["scaffold"], rrna, fna.name)
+                continue
+            start, stop = int(r["start"]), int(r["stop"])
+            seq = scaffolds[r["scaffold"]][start - 1:stop]          # GFF: 1-based, inclusive
+            if r["strand"] == "-":
+                seq = reverse_complement(seq)
+            yield name, f"{name}#{r['scaffold']}#{start}-{stop}#{r['strand']}#{rrna}", seq
+
+
+def read_fasta(path: Path) -> Iterator[Tuple[str, str]]:
+    """(header without '>', sequence) for every record of a FASTA file."""
+    header: Optional[str] = None
+    buf: List[str] = []
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if line.startswith(">"):
+                if header is not None:
+                    yield header, "".join(buf)
+                header, buf = line[1:].strip(), []
+            elif header is not None:
+                buf.append(line.strip())
+    if header is not None:
+        yield header, "".join(buf)
+
+
+def genome_of_seq_id(seq_id: str) -> str:
+    """Genome Name of a `Name#scaffold#start-stop#strand#16S_rRNA` sequence ID."""
+    return strip_fna(seq_id.split("#", 1)[0])
+
+
+RRNA_TABLE_COLUMNS = ["Genome", "Sequence_ID", "Length_bp"]
+
+
+def write_rrna(records: Iterable[Tuple[str, str, str]], fasta_path: Path, table_path: Path) -> Dict[str, int]:
+    """
+    Write (Name, sequence ID, sequence) records to a FASTA and to a table with the layout of
+    Supplementary Table 5 (Genome, Sequence_ID, Length_bp). Returns Name → sequences written.
+    """
+    counts: Dict[str, int] = {}
+    fasta_tmp = fasta_path.with_name(fasta_path.name + ".part")
+    table_tmp = table_path.with_name(table_path.name + ".part")
+    fasta_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(fasta_tmp, "w", encoding="utf-8") as fa, open(table_tmp, "w", encoding="utf-8") as tb:
+        tb.write("\t".join(RRNA_TABLE_COLUMNS) + "\n")
+        for name, seq_id, seq in records:
+            fa.write(f">{seq_id}\n{seq}\n")
+            tb.write(f"{name}\t{seq_id}\t{len(seq)}\n")
+            counts[name] = counts.get(name, 0) + 1
+    fasta_tmp.replace(fasta_path)
+    table_tmp.replace(table_path)
+    return counts
