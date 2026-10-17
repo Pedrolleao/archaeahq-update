@@ -207,6 +207,26 @@ class Context:
     def describe_db(self) -> str:
         return f"{self.db_version}: {len(self.db_rows):,} genomes ({self.db_table})"
 
+    def uses_bundled_db(self) -> bool:
+        """True when no release folder was found and the table bundled with the package is in use."""
+        return not self.args.db_table and self.current_release is None
+
+    def describe_db_source(self) -> str:
+        """Where the database table came from, for the command header."""
+        if self.args.db_table:
+            return "--db-table"
+        if self.current_release:
+            return f"newest {C.RELEASE_PREFIX}* folder in {self.releases_dir}"
+        return f"bundled table (no {C.RELEASE_PREFIX}* folder in {self.releases_dir})"
+
+    def show_db(self) -> None:
+        """Print which database version is used and where it was looked for."""
+        ui.kv("database", self.describe_db())
+        ui.kv("found in", self.describe_db_source())
+        if self.uses_bundled_db():
+            ui.warn(f"no release folder in {self.releases_dir} → using the bundled {C.BUNDLED_VERSION} table; "
+                    f"pass --releases-dir or set $ARCHAEAHQ_RELEASES to the folder holding your versions")
+
     def stage_dir(self, stage: str) -> Path:
         idx = list(STAGE_TITLES).index(stage)
         d = self.run_dir / f"{idx:02d}_{stage}"
@@ -659,7 +679,7 @@ def cmd_setup(ctx: Context) -> int:
         C.save_json(ctx.workdir / "environment.json", envcheck.environment_summary(ctx.tools, ctx.checkm2_db))
     ui.ok("everything needed is in place")
     ui.kv("work directory", ctx.workdir)
-    ui.kv("database", ctx.describe_db())
+    ctx.show_db()
     return 0
 
 
@@ -808,6 +828,7 @@ def cmd_check(ctx: Context) -> int:
     ctx.run_dir.mkdir(parents=True, exist_ok=True)
     ctx.log_path = ctx.run_dir / "commands.log"
     C.setup_file_logging(ctx.run_dir / "archaeahq_update.log")
+    ctx.show_db()
     with ui.stage(1, 2, STAGE_TITLES["env"]):
         stage_env(ctx, ["datasets", "dataformat"], need_checkm2_db=False)
     with ui.stage(2, 2, STAGE_TITLES["list"]):
@@ -855,7 +876,7 @@ def cmd_run(ctx: Context) -> int:
     ctx.log_path = ctx.run_dir / "commands.log"
     C.setup_file_logging(ctx.run_dir / "archaeahq_update.log")
     ui.kv("run folder", ctx.run_dir)
-    ui.kv("database", ctx.describe_db())
+    ctx.show_db()
     ui.kv("database FASTA", a.db_fna or f"sketch {a.db_sketch}")
     ui.kv("threads", a.threads)
 
