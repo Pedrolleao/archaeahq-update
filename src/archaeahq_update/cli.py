@@ -257,8 +257,15 @@ def stage_env(ctx: Context, required: List[str], need_checkm2_db: bool) -> None:
     rows = [[t.name, t.version or "?", t.source] for t in ctx.tools.values()]
     ui.table("Tools", ["tool", "version", "where"], rows, justify={"version": "left", "where": "left"})
     if need_checkm2_db and "checkm2" in ctx.tools:
+        # other places a previous setup/run may have put the database: the default work folder next to
+        # the database versions and the one in the current folder
+        other_caches = []
+        for wd in (ctx.releases_dir / "archaeahq_update_work", Path.cwd() / "archaeahq_update_work"):
+            cache = (wd / "cache" / "CheckM2_database").resolve()
+            if cache != ctx.cache_dir / "CheckM2_database" and cache not in other_caches:
+                other_caches.append(cache)
         ctx.checkm2_db = envcheck.ensure_checkm2_db(ctx.tools["checkm2"], ctx.cache_dir / "CheckM2_database",
-                                                    a.checkm2_db, ctx.log_path, ui=ui)
+                                                    a.checkm2_db, ctx.log_path, ui=ui, extra_dirs=other_caches)
         ui.ok(f"CheckM2 database: {ctx.checkm2_db}")
     if ctx.run_dir:
         C.save_json(ctx.run_dir / "environment.json", envcheck.environment_summary(ctx.tools, ctx.checkm2_db))

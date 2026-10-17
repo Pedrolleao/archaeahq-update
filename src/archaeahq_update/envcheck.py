@@ -203,16 +203,58 @@ def find_checkm2_db(candidates: Sequence[Optional[str]]) -> Optional[Path]:
     return None
 
 
+def checkm2_registered_db(checkm2: Tool) -> Optional[Path]:
+    """The database CheckM2 itself remembers (`checkm2 database --current`, set by its download/setdblocation)."""
+    try:
+        out = subprocess.run(checkm2("database", "--current"), capture_output=True, text=True, timeout=120)
+    except (subprocess.SubprocessError, OSError):
+        return None
+    for line in reversed((out.stdout + "\n" + out.stderr).splitlines()):
+        m = re.search(r"(\S+" + re.escape(CHECKM2_DB_FILE) + r")\s*$", line.strip())
+        if m:
+            p = Path(m.group(1)).expanduser()
+            return p if p.is_file() else None
+    return None
+
+
 def ensure_checkm2_db(checkm2: Tool, db_dir: Path, explicit: Optional[str], log_path: Optional[Path],
-                      ui=None) -> Path:
-    found = find_checkm2_db([explicit, os.environ.get("CHECKM2DB"), db_dir])
+                      ui=None, extra_dirs: Sequence[Path] = ()) -> Path:
+    """
+    Find uniref100.KO.1.dmnd without downloading it again. Search order: --checkm2-db, $CHECKM2DB, the cache
+    of this work folder, the location CheckM2 itself registered at its last download, then the caches of
+    other work folders (`extra_dirs`, e.g. the default one next to the database versions). Downloads into
+    `db_dir` only when none of these has it.
+    """
+    def say(msg):
+        if ui:
+            ui.info(msg)
+
+    found = find_checkm2_db([explicit])
     if found:
         return found
     if explicit:
         raise RuntimeError(f"CheckM2 database not found under --checkm2-db {explicit}")
+    found = find_checkm2_db([os.environ.get("CHECKM2DB")])
+    if found:
+        say(f"CheckM2 database from $CHECKM2DB: {found}")
+        return found
+    found = find_checkm2_db([db_dir])
+    if found:
+        return found
+    found = checkm2_registered_db(checkm2)
+    if found:
+        say(f"CheckM2 database registered with checkm2 (`checkm2 database --current`): {found}")
+        return found
+    for d in extra_dirs:
+        found = find_checkm2_db([d])
+        if found:
+            say(f"CheckM2 database found in another work folder: {found}")
+            return found
+    looked = [f"--checkm2-db", "$CHECKM2DB", str(db_dir), "`checkm2 database --current`"] + [str(d) for d in extra_dirs]
     db_dir.mkdir(parents=True, exist_ok=True)
     if ui:
-        ui.warn(f"CheckM2 database not found → downloading (~3 GB) into {db_dir}")
+        ui.warn(f"CheckM2 database not found (looked at {', '.join(looked)}) → downloading (~3 GB) into {db_dir}; "
+                f"pass --checkm2-db or set $CHECKM2DB to reuse an existing copy")
     run_cmd(checkm2("database", "--download", "--path", str(db_dir)), log_path=log_path)
     found = find_checkm2_db([db_dir])
     if not found:
