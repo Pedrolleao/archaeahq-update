@@ -328,6 +328,81 @@ def run_cmd(
     return proc
 
 
+def run_cmd_live(
+    cmd: Sequence[str],
+    log_path: Optional[Path],
+    on_line,
+    poll=None,
+    poll_interval: float = 1.0,
+    check: bool = True,
+) -> subprocess.CompletedProcess:
+    """
+    Run a command and hand every output line (stdout+stderr, split on \\n and \\r so that carriage-return
+    progress counters arrive as lines) to `on_line(text)` while it runs; `poll()` is called every
+    `poll_interval` seconds in between. Output is appended to `log_path` as with run_cmd.
+    """
+    import queue
+    import threading
+
+    cmd = [str(c) for c in cmd]
+    log.info("RUN  %s", cmd_str(cmd))
+    t0 = time.time()
+    lf = open(log_path, "a", encoding="utf-8") if log_path else None
+    if lf:
+        lf.write(f"\n$ {cmd_str(cmd)}\n")
+        lf.flush()
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=0)
+    q: "queue.Queue[str]" = queue.Queue()
+
+    def reader():
+        buf = b""
+        for chunk in iter(lambda: proc.stdout.read(4096), b""):
+            buf += chunk
+            while True:
+                i = min([j for j in (buf.find(b"\n"), buf.find(b"\r")) if j >= 0], default=-1)
+                if i < 0:
+                    break
+                line, buf = buf[:i], buf[i + 1:]
+                q.put(line.decode("utf-8", errors="replace"))
+        if buf:
+            q.put(buf.decode("utf-8", errors="replace"))
+        q.put(None)
+
+    th = threading.Thread(target=reader, daemon=True)
+    th.start()
+    eof = False
+    try:
+        while not eof:
+            try:
+                item = q.get(timeout=poll_interval)
+            except queue.Empty:
+                if poll:
+                    poll()
+                continue
+            if item is None:
+                eof = True
+                break
+            if lf:
+                lf.write(item + "\n")
+            if item.strip():
+                on_line(item)
+            if poll and q.empty():
+                poll()
+        proc.wait()
+        if poll:
+            poll()
+        if lf:
+            lf.write(f"[exit {proc.returncode}, {time.time() - t0:.1f}s]\n")
+    finally:
+        if lf:
+            lf.close()
+        th.join(timeout=5)
+    if check and proc.returncode != 0:
+        tail = tail_of_file(log_path, 25) if log_path and log_path.exists() else ""
+        raise CommandError(cmd, proc.returncode, tail)
+    return subprocess.CompletedProcess(cmd, proc.returncode)
+
+
 def run_pipe(
     cmd1: Sequence[str],
     cmd2: Sequence[str],

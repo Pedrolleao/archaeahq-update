@@ -215,19 +215,26 @@ class _PlainProgress:
 
     def __exit__(self, *a):
         for tid, t in self._tasks.items():
-            console().print(f"  {t['desc']}: {t['done']}/{t['total']}")
+            if t["total"]:
+                console().print(f"  {t['desc']}: {t['done']}/{t['total']}")
         return False
 
     def add_task(self, description, total=None, **kw):
         self._n += 1
         self._tasks[self._n] = {"desc": description, "total": total, "done": 0}
-        console().print(f"  {description} (n={total})")
+        console().print(f"  {description}" + (f" (n={total})" if total else ""))
         return self._n
 
     def update(self, task_id, advance=0, **kw):
-        self._tasks[task_id]["done"] += advance
+        t = self._tasks[task_id]
+        t["done"] += advance
+        if "completed" in kw:
+            t["done"] = kw["completed"]
         if "total" in kw:
-            self._tasks[task_id]["total"] = kw["total"]
+            t["total"] = kw["total"]
+        if "description" in kw and kw["description"] != t["desc"]:
+            t["desc"] = kw["description"]
+            console().print(f"  {t['desc']}" + (f" (n={t['total']})" if t["total"] else ""))
 
     def advance(self, task_id, n=1):
         self.update(task_id, advance=n)

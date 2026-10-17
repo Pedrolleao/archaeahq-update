@@ -388,10 +388,16 @@ def stage_quality(ctx: Context, fnas: List[Path], fna_dir: Path, out_dir: Path) 
         ui.warn("no genomes to assess")
         return {}
     ui.info(f"CheckM2 on {len(fnas)} genome(s) with {ctx.args.threads} threads — this is the slowest step "
-            f"(roughly 1-3 min per 100 genomes once the models are loaded)")
-    with ui.spinner("running checkm2 predict"):
+            f"(roughly 1-3 min per 100 genomes once the models are loaded); the DIAMOND search is the longest "
+            f"phase and only reports progress per batch of {Q.CHECKM2_DIAMOND_CHUNK} genomes")
+    with ui.progress() as prog:
+        task = prog.add_task("starting CheckM2", total=None)
+
+        def on_progress(label, done, total):
+            prog.update(task, description=label, total=total, completed=done or 0)
+
         report_path = Q.run_checkm2(ctx.tools, fna_dir, out_dir / "checkm2", ctx.args.threads, ctx.checkm2_db,
-                                    ctx.log_path, lowmem=ctx.args.lowmem)
+                                    ctx.log_path, lowmem=ctx.args.lowmem, progress=on_progress)
     qual = Q.parse_quality_report(report_path)
     shutil.copy(report_path, out_dir / "quality_report.tsv")
     n_pass = sum(1 for v in qual.values()
