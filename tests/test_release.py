@@ -209,3 +209,17 @@ def test_accept_list_and_nothing_to_apply(world, tmp_path: Path):
 
 def test_rejects_older_version_label(world):
     assert _release(world, "--version", "v0.9") != 0
+
+
+def test_comparison_separates_orphan_fasta_files(world, fake_tools):
+    """A FASTA file in the previous fna/ folder with no table row is counted apart, not as a genome file."""
+    _fna(world["v10"] / "fna", "GCA_000000099.1_orphan_genomic")
+    assert _release(world) == 0
+    v11 = world["rel"] / "Archaea_HQ-v1.1"
+    text = (v11 / "comparison.txt").read_text()
+    lines = {ln.split("  ")[0].strip(): ln.split() for ln in text.splitlines() if ln.strip()}
+    assert lines["genome FASTA files"][-2:] == ["3", "5"]              # 3 table-backed files in v1.0, 5 in v1.1
+    assert lines["FASTA files not in the table"][-2:] == ["1", "0"]
+    assert "1 FASTA file(s) in the v1.0 folder had no row in its table" in text
+    assert not (v11 / "fna" / "GCA_000000099.1_orphan_genomic.fna").exists()
+    assert world["v10"].exists()                                        # a folder with orphans is never deleted

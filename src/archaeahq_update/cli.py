@@ -1406,7 +1406,11 @@ def cmd_release(ctx: Context) -> int:
     with ui.stage(stage_no, total, f"Comparing {old_label} with {new_label}"):
         lines = _release_compare(ctx, old_label, new_label, ctx.db_rows, new_rows, old_files, new_files_all, changes)
         if not a.dry_run:
-            seq_rows = [["genome FASTA files", f"{len(old_files):,}", f"{len(new_files_all):,}"]]
+            # files backed by a table row; FASTA files without a row (orphans) are listed apart so the
+            # count cannot look like genomes lost between the versions
+            seq_rows = [["genome FASTA files", f"{len(old_files) - len(orphans):,}", f"{len(new_files_all):,}"]]
+            if orphans:
+                seq_rows.append(["FASTA files not in the table", f"{len(orphans):,}", "0"])
             if faa_stats:
                 seq_rows.append(["protein files", f"{len(old_faa):,}", f"{faa_stats['carried'] + faa_stats['predicted']:,}"])
             if rrna_stats:
@@ -1416,6 +1420,11 @@ def cmd_release(ctx: Context) -> int:
                              ["genomes with a 16S rRNA sequence", old_gen, f"{rrna_stats['genomes']:,}"]]
             ui.table("Sequence files", ["file", old_label, new_label], seq_rows)
             lines += [""] + _plain_table(["file", old_label, new_label], seq_rows)
+            if orphans:
+                note = (f"{len(orphans):,} FASTA file(s) in the {old_label} folder had no row in its table "
+                        f"and were not carried over to {new_label}")
+                ui.info(note)
+                lines += ["", note]
             C.write_lines(out / "comparison.txt", lines)
             ui.kv("comparison", out / "comparison.txt")
             ui.kv("changes", out / "release_changes.tsv")

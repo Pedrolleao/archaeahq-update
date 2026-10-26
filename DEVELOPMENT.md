@@ -156,7 +156,8 @@ No file in the bundle references a path outside it (checked with `grep` for `/ho
   FASTA at the barrnap GFF coordinates of the run (`rna.iter_rrna`), which reproduces the v1.0
   headers. Prodigal/barrnap work goes to `<workdir>/release_staging/<version>/` (resumable,
   removed on success). `run` itself never writes database files. Prints the old-vs-new comparison (per kingdom, summary
-  statistics, environment categories), then deletes the superseded version folder after verifying
+  statistics, environment categories, sequence files — orphan FASTA files of the previous folder
+  are counted in a row of their own, not as genome files), then deletes the superseded version folder after verifying
   every carried genome and protein file (name + size) in the new folder (`--keep-previous` to skip;
   folders with orphan FASTA files or with files the new version does not rebuild, the bundle,
   `data/` and the work directory are never deleted). Version

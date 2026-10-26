@@ -210,7 +210,10 @@ rows to the current version and writes the next one (minor version + 1) into `--
   unpacked folder given with `--db-fna`) is the one removed; the v1.0 table stays in `data/`.
 * The comparison between the two versions (genomes per kingdom, quality and size statistics,
   environment categories, number of genome/protein/16S sequence files) is printed and saved as
-  `comparison.txt`.
+  `comparison.txt`. The "genome FASTA files" row counts only files that have a row in the table;
+  FASTA files of the previous folder without a row (e.g. the figshare `fna.zip` holds more genomes
+  than the v1.0 table) are reported in their own row, "FASTA files not in the table", and are not
+  carried over.
 
 ```
                     Genomes per kingdom
