@@ -73,7 +73,7 @@ Installed, the command is `archaeahq-update`; from a clone, `python3 archaeahq_u
 (same commands and flags — the examples below use the installed name).
 
 ```bash
-archaeahq-update setup                # conda env (if needed) + CheckM2 database
+archaeahq-update setup                # conda env (if needed) + CheckM2 database (asks for its path if you have one)
 archaeahq-update fetch-db             # ArchaeaHQ v1.0 from figshare → Archaea_HQ-v1.0/
 ```
 
@@ -256,7 +256,7 @@ archaeahq_update.py release    [--run NAME | --table F] [--new-fna DIR] [--new-g
 | `--threads N` | CPUs − 2 | threads for CheckM2, skani, barrnap |
 | `--api-key KEY` | `$NCBI_API_KEY` | NCBI API key |
 | `--conda-env NAME` | `archaeahq-update` | environment to create when tools are missing |
-| `--checkm2-db PATH` | found automatically | folder or `.dmnd` file of the CheckM2 database (default search: `$CHECKM2DB`, the work cache, the location registered with `checkm2 database --current`, the work folder next to the database versions; downloaded to the cache only when none has it) |
+| `--checkm2-db PATH` | found automatically | folder or `.dmnd` file of an existing CheckM2 database. Default search: `$CHECKM2DB`, the database of the previous `setup` of this work folder, the work cache, the location CheckM2 itself remembers (its `diamond_path.json`, else `checkm2 database --current`), CheckM2's default download folder `~/databases`, the work folder next to the database versions, and `share/` of every conda environment. When none has it, `setup` asks for the path on a terminal; in a batch job (no terminal) it downloads the database (~3 GB) into the work cache |
 | `--no-install` | | never create a conda environment; fail instead |
 | `--plain` | (also `NO_COLOR=1`) | no colours, no progress bars |
 

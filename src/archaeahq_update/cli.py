@@ -78,7 +78,9 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--api-key", default=None, help="NCBI API key (or set $NCBI_API_KEY)")
         sp.add_argument("--conda-env", default=envcheck.DEFAULT_ENV_NAME,
                         help="name of the conda environment to create when tools are missing")
-        sp.add_argument("--checkm2-db", default=None, help="folder (or .dmnd file) of the CheckM2 database")
+        sp.add_argument("--checkm2-db", default=None,
+                        help="folder (or .dmnd file) of an existing CheckM2 database (default: found automatically; "
+                             "`setup` asks for it on a terminal before downloading)")
         sp.add_argument("--no-install", action="store_true", help="never create a conda environment; fail instead")
         sp.add_argument("--plain", action="store_true", help="plain text output (no colours, no progress bars)")
         sp.add_argument("--releases-dir", default=RELEASES_DEFAULT,
@@ -265,7 +267,8 @@ def stage_env(ctx: Context, required: List[str], need_checkm2_db: bool) -> None:
             if cache != ctx.cache_dir / "CheckM2_database" and cache not in other_caches:
                 other_caches.append(cache)
         ctx.checkm2_db = envcheck.ensure_checkm2_db(ctx.tools["checkm2"], ctx.cache_dir / "CheckM2_database",
-                                                    a.checkm2_db, ctx.log_path, ui=ui, extra_dirs=other_caches)
+                                                    a.checkm2_db, ctx.log_path, ui=ui, extra_dirs=other_caches,
+                                                    workdir=ctx.workdir)
         ui.ok(f"CheckM2 database: {ctx.checkm2_db}")
     if ctx.run_dir:
         C.save_json(ctx.run_dir / "environment.json", envcheck.environment_summary(ctx.tools, ctx.checkm2_db))

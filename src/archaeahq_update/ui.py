@@ -15,6 +15,7 @@ from typing import Dict, Iterable, List, Optional, Sequence
 
 from rich import box
 from rich.console import Console
+from rich.markup import escape
 from rich.panel import Panel
 from rich.progress import (BarColumn, MofNCompleteColumn, Progress, SpinnerColumn,
                            TextColumn, TimeElapsedColumn, TimeRemainingColumn)
@@ -138,6 +139,20 @@ def confirm(question: str, default: bool = True) -> bool:
     if not ans:
         return default
     return ans in ("y", "yes")
+
+
+def ask(question: str, default: str = "") -> str:
+    """Free-text question on the terminal; non-interactive sessions get the default."""
+    import sys
+    if not sys.stdin.isatty():
+        return default
+    hint = f" [{escape(default)}]" if default else ""
+    try:
+        ans = console().input(f"[secondary]?[/] {escape(question)}{hint} ").strip()
+    except (EOFError, KeyboardInterrupt):
+        console().print()
+        return default
+    return ans or default
 
 
 def kv(key: str, value, key_width: int = 22) -> None:

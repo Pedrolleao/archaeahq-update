@@ -90,6 +90,29 @@ def conda_env_prefixes(conda: str) -> List[str]:
     return prefixes
 
 
+def registered_env_prefixes() -> List[str]:
+    """
+    Environments listed in ~/.conda/environments.txt: every conda installation of the user writes there,
+    so it also covers environments created with another conda (a cluster module, an old Miniconda) or
+    with `-p` outside any envs/ folder, which `conda env list` of the conda on PATH does not show.
+    """
+    txt = Path.home() / ".conda" / "environments.txt"
+    try:
+        lines = txt.read_text().splitlines()
+    except OSError:
+        return []
+    return [ln.strip() for ln in lines if ln.strip() and Path(ln.strip()).is_dir()]
+
+
+def all_conda_prefixes(conda: Optional[str]) -> List[str]:
+    """`conda env list` of the conda found, plus the registered environments, without duplicates."""
+    seen: List[str] = []
+    for p in (conda_env_prefixes(conda) if conda else []) + registered_env_prefixes():
+        if p not in seen:
+            seen.append(p)
+    return seen
+
+
 def env_prefix_named(conda: str, name: str) -> Optional[str]:
     for p in conda_env_prefixes(conda):
         if Path(p).name == name:
@@ -125,7 +148,7 @@ def find_tool(name: str, conda: Optional[str], preferred_env: str = DEFAULT_ENV_
     if not conda:
         return None
     exe = _conda_base(conda) or conda
-    prefixes = conda_env_prefixes(conda)
+    prefixes = all_conda_prefixes(conda)
     prefixes.sort(key=lambda x: (Path(x).name != preferred_env, x))
     for prefix in prefixes:
         if (Path(prefix) / "bin" / name).exists():
@@ -203,27 +226,97 @@ def find_checkm2_db(candidates: Sequence[Optional[str]]) -> Optional[Path]:
     return None
 
 
-def checkm2_registered_db(checkm2: Tool) -> Optional[Path]:
-    """The database CheckM2 itself remembers (`checkm2 database --current`, set by its download/setdblocation)."""
+def checkm2_install_prefix(checkm2: Tool) -> Optional[Path]:
+    """The conda prefix (or install root) CheckM2 runs from."""
+    if "-p" in checkm2.cmd:
+        return Path(checkm2.cmd[checkm2.cmd.index("-p") + 1])
     try:
-        out = subprocess.run(checkm2("database", "--current"), capture_output=True, text=True, timeout=120)
+        exe = Path(checkm2.cmd[0]).resolve()
+    except OSError:
+        return None
+    return exe.parent.parent if exe.parent.name in ("bin", "Scripts") else None
+
+
+def checkm2_definition_db(checkm2: Tool) -> Optional[Path]:
+    """
+    The database CheckM2 itself remembers, read from its definition file
+    (site-packages/checkm2/version/diamond_path.json, written by `checkm2 database --download` and
+    `--setdblocation`). Reading the file avoids starting CheckM2, which loads TensorFlow and can take
+    minutes on a cluster filesystem. Returns None when the file is missing or says "Not Set".
+    """
+    prefix = checkm2_install_prefix(checkm2)
+    if not prefix:
+        return None
+    for f in sorted(prefix.glob("lib/python3*/site-packages/checkm2/version/diamond_path.json")):
+        try:
+            loc = json.loads(f.read_text()).get("DBPATH", "")
+        except (OSError, json.JSONDecodeError, AttributeError):
+            continue
+        if loc and loc != "Not Set":
+            found = find_checkm2_db([loc])
+            if found:
+                return found
+    return None
+
+
+def checkm2_registered_db(checkm2: Tool) -> Optional[Path]:
+    """The database CheckM2 reports with `checkm2 database --current` (a .dmnd file or its folder)."""
+    try:
+        out = subprocess.run(checkm2("database", "--current"), capture_output=True, text=True, timeout=600)
     except (subprocess.SubprocessError, OSError):
         return None
     for line in reversed((out.stdout + "\n" + out.stderr).splitlines()):
-        m = re.search(r"(\S+" + re.escape(CHECKM2_DB_FILE) + r")\s*$", line.strip())
-        if m:
-            p = Path(m.group(1)).expanduser()
-            return p if p.is_file() else None
+        loc = line.rsplit("INFO:", 1)[-1].strip() if "INFO:" in line else line.strip()
+        if loc and loc != "Not Set" and not loc.startswith("["):
+            found = find_checkm2_db([loc])
+            if found:
+                return found
+    return None
+
+
+def remembered_checkm2_db(workdir: Optional[Path]) -> Optional[Path]:
+    """The database a previous `setup` or run of this work folder used (environment.json)."""
+    if not workdir:
+        return None
+    f = workdir / "environment.json"
+    try:
+        loc = json.loads(f.read_text()).get("checkm2_db")
+    except (OSError, json.JSONDecodeError, AttributeError):
+        return None
+    return find_checkm2_db([loc]) if loc else None
+
+
+def conda_share_dirs() -> List[Path]:
+    """share/ folders of every conda environment: where a database installed next to a tool usually lives."""
+    return [Path(p) / "share" for p in all_conda_prefixes(find_conda()) if (Path(p) / "share").is_dir()]
+
+
+def ask_checkm2_db(ui, db_dir: Path) -> Optional[Path]:
+    """
+    On a terminal, ask for the path of an existing database before downloading 3 GB; an empty answer
+    means download. Without a terminal `ui.ask` returns the default at once, so batch jobs never wait.
+    """
+    for _ in range(3):
+        ans = ui.ask(f"Path of an existing CheckM2 database ({CHECKM2_DB_FILE} or its folder), "
+                     f"or Enter to download it (~3 GB) into {db_dir}:", "")
+        if not ans:
+            return None
+        found = find_checkm2_db([ans])
+        if found:
+            return found
+        ui.err(f"{CHECKM2_DB_FILE} not found under {ans}")
     return None
 
 
 def ensure_checkm2_db(checkm2: Tool, db_dir: Path, explicit: Optional[str], log_path: Optional[Path],
-                      ui=None, extra_dirs: Sequence[Path] = ()) -> Path:
+                      ui=None, extra_dirs: Sequence[Path] = (), workdir: Optional[Path] = None) -> Path:
     """
-    Find uniref100.KO.1.dmnd without downloading it again. Search order: --checkm2-db, $CHECKM2DB, the cache
-    of this work folder, the location CheckM2 itself registered at its last download, then the caches of
-    other work folders (`extra_dirs`, e.g. the default one next to the database versions). Downloads into
-    `db_dir` only when none of these has it.
+    Find uniref100.KO.1.dmnd without downloading it again. Search order: --checkm2-db, $CHECKM2DB, the
+    database used by the previous setup/run of this work folder (environment.json), the cache of this
+    work folder, the location CheckM2 itself remembers (its definition file, else
+    `checkm2 database --current`), CheckM2's default download folder ~/databases, the caches of other
+    work folders (`extra_dirs`), and share/ of every conda environment. When none has it, a terminal
+    user is asked for a path; otherwise (or on an empty answer) it is downloaded into `db_dir`.
     """
     def say(msg):
         if ui:
@@ -238,23 +331,42 @@ def ensure_checkm2_db(checkm2: Tool, db_dir: Path, explicit: Optional[str], log_
     if found:
         say(f"CheckM2 database from $CHECKM2DB: {found}")
         return found
+    found = remembered_checkm2_db(workdir)
+    if found:
+        say(f"CheckM2 database used by the previous setup of this work folder: {found}")
+        return found
     found = find_checkm2_db([db_dir])
     if found:
         return found
-    found = checkm2_registered_db(checkm2)
+    found = checkm2_definition_db(checkm2) or checkm2_registered_db(checkm2)
     if found:
-        say(f"CheckM2 database registered with checkm2 (`checkm2 database --current`): {found}")
+        say(f"CheckM2 database that checkm2 itself remembers: {found}")
+        return found
+    home_db = Path.home() / "databases"
+    found = find_checkm2_db([home_db])
+    if found:
+        say(f"CheckM2 database in CheckM2's default download folder: {found}")
         return found
     for d in extra_dirs:
         found = find_checkm2_db([d])
         if found:
             say(f"CheckM2 database found in another work folder: {found}")
             return found
-    looked = [f"--checkm2-db", "$CHECKM2DB", str(db_dir), "`checkm2 database --current`"] + [str(d) for d in extra_dirs]
-    db_dir.mkdir(parents=True, exist_ok=True)
+    for d in conda_share_dirs():
+        found = find_checkm2_db([d])
+        if found:
+            say(f"CheckM2 database found in a conda environment: {found}")
+            return found
+    looked = ["--checkm2-db", "$CHECKM2DB", str(db_dir), "`checkm2 database --current`", str(home_db)] + \
+             [str(d) for d in extra_dirs] + ["share/ of the conda environments"]
     if ui:
-        ui.warn(f"CheckM2 database not found (looked at {', '.join(looked)}) → downloading (~3 GB) into {db_dir}; "
+        ui.warn(f"CheckM2 database not found (looked at {', '.join(looked)})")
+        found = ask_checkm2_db(ui, db_dir)
+        if found:
+            return found
+        ui.warn(f"downloading the CheckM2 database (~3 GB) into {db_dir}; "
                 f"pass --checkm2-db or set $CHECKM2DB to reuse an existing copy")
+    db_dir.mkdir(parents=True, exist_ok=True)
     run_cmd(checkm2("database", "--download", "--path", str(db_dir)), log_path=log_path)
     found = find_checkm2_db([db_dir])
     if not found:
