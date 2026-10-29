@@ -58,7 +58,10 @@ Created at Vee Lab - Radboud University.
 conda create -n archaeahq -c conda-forge -c bioconda archaeahq-update
 conda activate archaeahq
 
-# b) pip, into any Python ≥ 3.10 (the external tools are installed by `setup` afterwards)
+# b) pip, into a virtual environment in your working directory (any Python ≥ 3.10; nothing
+#    lands in ~/.local; the external tools are installed by `setup` afterwards)
+python3 -m venv archaeahq-env
+source archaeahq-env/bin/activate
 pip install git+https://github.com/Pedrolleao/archaeahq-update.git
 
 # c) or just clone: the launcher archaeahq_update.py runs from the clone without installing
