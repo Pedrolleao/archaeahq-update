@@ -325,7 +325,7 @@ log is `runs/<run>/archaeahq_update.log`.
 ```
 archaeahq-update/
 ├── archaeahq_update.py          launcher for running from a clone (no install needed)
-├── pyproject.toml               pip-installable package; entry point `archaeahq-update`
+├── setup.cfg, pyproject.toml    pip-installable package; entry point `archaeahq-update`
 ├── environment.yml              → src/archaeahq_update/data/environment.yml (conda env with the tools)
 ├── README.md  DEVELOPMENT.md  LICENSE
 ├── assets/                      ArchaeaHQ logo
